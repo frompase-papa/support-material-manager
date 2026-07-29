@@ -267,7 +267,18 @@ function AttendanceRow({
             </div>
           )}
         </div>
-        {!compact && <TypeBadge type={student.type} />}
+        <div className="flex shrink-0 items-center gap-2">
+          {!compact && <TypeBadge type={student.type} />}
+          <button
+            type="button"
+            onClick={() => store.removeAttendance(student.id, date)}
+            aria-label={`${student.name}を休みにする`}
+            title="この日を欠席（休み）にする"
+            className="rounded-md border border-zinc-300 px-2 py-1 text-xs text-zinc-500 hover:border-red-300 hover:bg-red-50 hover:text-red-600 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-red-800 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+          >
+            休み
+          </button>
+        </div>
       </div>
 
       <div className="mt-3">

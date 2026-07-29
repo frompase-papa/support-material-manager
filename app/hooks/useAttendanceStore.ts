@@ -48,6 +48,8 @@ export interface AttendanceStore {
   setMaterial: (studentId: string, date: Date, material: Material) => void;
   clearMaterial: (studentId: string, date: Date) => void;
   addAttendance: (studentId: string, date: Date) => void;
+  /** その日の出席から外して「欠席（休み）」にする */
+  removeAttendance: (studentId: string, date: Date) => void;
 
   importMonth: (parsed: ParsedMonth) => ImportResult;
   clearMonth: (year: number, month: number) => void;
@@ -202,6 +204,44 @@ export function useAttendanceStore(): AttendanceStore {
       if (list.includes(studentId)) return prev;
       return { ...prev, [key]: [...list, studentId] };
     });
+    // 欠席リストに入っていれば取り除く
+    setAbsentByDate((prev) => {
+      const list = prev[key];
+      if (!list || !list.includes(studentId)) return prev;
+      const nextList = list.filter((id) => id !== studentId);
+      const next = { ...prev };
+      if (nextList.length > 0) next[key] = nextList;
+      else delete next[key];
+      return next;
+    });
+  }, []);
+
+  const removeAttendance = useCallback((studentId: string, date: Date) => {
+    const key = toDateKey(date);
+    // 出席から外す
+    setPresentByDate((prev) => {
+      const list = prev[key];
+      if (!list || !list.includes(studentId)) return prev;
+      const nextList = list.filter((id) => id !== studentId);
+      const next = { ...prev };
+      if (nextList.length > 0) next[key] = nextList;
+      else delete next[key];
+      return next;
+    });
+    // 欠席リストへ移す
+    setAbsentByDate((prev) => {
+      const list = prev[key] ?? [];
+      if (list.includes(studentId)) return prev;
+      return { ...prev, [key]: [...list, studentId] };
+    });
+    // 教材の手動指定を掃除
+    const recId = makeRecordId(studentId, key);
+    setOverrides((prev) => {
+      if (!(recId in prev)) return prev;
+      const next = { ...prev };
+      delete next[recId];
+      return next;
+    });
   }, []);
 
   const importMonth = useCallback((parsed: ParsedMonth): ImportResult => {
@@ -271,6 +311,7 @@ export function useAttendanceStore(): AttendanceStore {
     setMaterial,
     clearMaterial,
     addAttendance,
+    removeAttendance,
     importMonth,
     clearMonth,
     clearAll,
