@@ -22,6 +22,9 @@ import { MaterialSelectionBadge, TypeBadge } from "@/app/components/badges";
 import { MaterialToggle } from "@/app/components/MaterialToggle";
 import { StudentSettingsPanel } from "@/app/components/StudentSettingsPanel";
 import { HugImportPanel } from "@/app/components/HugImportPanel";
+import { MaterialAssignment } from "@/app/components/MaterialAssignment";
+import { SupportNote } from "@/app/components/SupportNote";
+import { MaterialMasterPanel } from "@/app/components/MaterialMasterPanel";
 
 type ViewMode = "today" | "week" | "month";
 
@@ -39,6 +42,7 @@ export default function AttendanceCalendar() {
   const [anchor, setAnchor] = useState<Date>(() => startOfDay(new Date()));
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [masterOpen, setMasterOpen] = useState(false);
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
@@ -58,6 +62,13 @@ export default function AttendanceCalendar() {
             className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
           >
             ↑ HUGデータ取込
+          </button>
+          <button
+            type="button"
+            onClick={() => setMasterOpen(true)}
+            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+          >
+            📚 教材マスタ
           </button>
           <button
             type="button"
@@ -112,6 +123,9 @@ export default function AttendanceCalendar() {
           defaultMonth={anchor.getMonth() + 1}
           onClose={() => setImportOpen(false)}
         />
+      )}
+      {masterOpen && (
+        <MaterialMasterPanel store={store} onClose={() => setMasterOpen(false)} />
       )}
     </div>
   );
@@ -281,6 +295,8 @@ function AttendanceRow({
         </div>
       </div>
 
+      {!compact && <SupportNote studentId={student.id} store={store} />}
+
       <div className="mt-3">
         <MaterialToggle
           material={item.material}
@@ -290,6 +306,15 @@ function AttendanceRow({
           onClearToAuto={() => store.clearMaterial(student.id, date)}
         />
       </div>
+
+      {item.requiresSelection && (
+        <MaterialAssignment
+          studentId={student.id}
+          date={date}
+          store={store}
+          readOnly={compact}
+        />
+      )}
     </div>
   );
 }
