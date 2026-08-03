@@ -34,6 +34,20 @@ function makeClientId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+/** 日付ごとの名簿リストを統合（同じ日は名前をユニオン） */
+function mergeDateLists(
+  base: Record<string, string[]>,
+  add: Record<string, string[]>
+): Record<string, string[]> {
+  const next: Record<string, string[]> = { ...base };
+  for (const [date, list] of Object.entries(add)) {
+    const set = new Set(next[date] ?? []);
+    list.forEach((x) => set.add(x));
+    next[date] = [...set];
+  }
+  return next;
+}
+
 /** localStorage に保存する状態 */
 interface PersistedState {
   typeById: Record<string, StudentType>;
@@ -59,8 +73,10 @@ export interface AttendanceStore {
 
   /** この端末にローカル保存された旧データがあるか（クラウド移行の案内用） */
   localBackupAvailable: boolean;
-  /** 端末のローカルデータをクラウドへ移行する */
+  /** 端末のローカルデータで上書き移行する（クラウドを置き換え） */
   migrateFromLocalStorage: () => boolean;
+  /** 端末のローカルデータをクラウドに統合する（何も消さずに足し合わせ） */
+  mergeFromLocalStorage: () => boolean;
 
   getForDate: (date: Date) => ResolvedAttendance[];
   getAbsentNamesOnDate: (date: Date) => string[];
@@ -214,6 +230,7 @@ export function useAttendanceStore(): AttendanceStore {
     };
   }, [hydrated, currentData]);
 
+  // 上書き：この端末のデータでクラウドを置き換える
   const migrateFromLocalStorage = useCallback((): boolean => {
     try {
       const raw = window.localStorage.getItem(LOCAL_BACKUP_KEY);
@@ -226,6 +243,57 @@ export function useAttendanceStore(): AttendanceStore {
       return false;
     }
   }, [applyData]);
+
+  // 統合：この端末のデータを、今のクラウドデータに足し合わせる（何も消さない）
+  const mergeFromLocalStorage = useCallback((): boolean => {
+    try {
+      const raw = window.localStorage.getItem(LOCAL_BACKUP_KEY);
+      if (!raw) return false;
+      const local = JSON.parse(raw) as Partial<PersistedState>;
+
+      // 教材：id でユニオン（重複は既存を優先）
+      setMaterials((cur) => {
+        const map = new Map(cur.map((m) => [m.id, m]));
+        for (const m of local.materials ?? []) if (!map.has(m.id)) map.set(m.id, m);
+        return [...map.values()];
+      });
+      // 出席・欠席：日付ごとにユニオン
+      setPresentByDate((cur) => mergeDateLists(cur, local.presentByDate ?? {}));
+      setAbsentByDate((cur) => mergeDateLists(cur, local.absentByDate ?? {}));
+      // 教材割り当て：recordId ごとにユニオン（最大3）
+      setAssignments((cur) => {
+        const next = { ...cur };
+        for (const [rec, ids] of Object.entries(local.assignments ?? {})) {
+          const merged = [...(next[rec] ?? [])];
+          for (const id of ids) {
+            if (!merged.includes(id) && merged.length < MAX_MATERIALS_PER_DAY) {
+              merged.push(id);
+            }
+          }
+          next[rec] = merged;
+        }
+        return next;
+      });
+      // 提供形態・手動教材：競合は既存（クラウド）を優先、無い分だけ追加
+      setTypeById((cur) => ({ ...(local.typeById ?? {}), ...cur }));
+      setOverrides((cur) => ({ ...(local.overrides ?? {}), ...cur }));
+      // 支援メモ：競合は両方を改行で連結（消さない）
+      setNotes((cur) => {
+        const next = { ...cur };
+        for (const [sid, text] of Object.entries(local.notes ?? {})) {
+          if (!next[sid]) next[sid] = text;
+          else if (next[sid] !== text) next[sid] = `${next[sid]}\n${text}`;
+        }
+        return next;
+      });
+
+      window.localStorage.setItem(MIGRATED_FLAG_KEY, "1");
+      setLocalBackupAvailable(false);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
 
   const students = useMemo<Student[]>(() => {
     const names = new Set<string>();
@@ -504,6 +572,7 @@ export function useAttendanceStore(): AttendanceStore {
     importedMonths,
     localBackupAvailable,
     migrateFromLocalStorage,
+    mergeFromLocalStorage,
     getForDate,
     getAbsentNamesOnDate,
     countPendingOnDate,

@@ -160,37 +160,60 @@ type Store = AttendanceStore;
 /* ------------------------------------------------------------------ */
 
 function MigrationBanner({ store }: { store: AttendanceStore }) {
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState<null | "merge" | "overwrite">(null);
 
   if (done) {
     return (
       <div className="mb-4 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-        この端末のデータをクラウドへ移行しました。他のPCでも同じアカウントでログインすると共有されます。
+        {done === "merge"
+          ? "この端末のデータをクラウドに統合しました（既存データは消していません）。全PCで共有されます。"
+          : "この端末のデータでクラウドを置き換えました。全PCで共有されます。"}
       </div>
     );
   }
 
   return (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/30">
+    <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/30">
       <p className="text-sm text-amber-800 dark:text-amber-300">
-        この端末に、以前ローカル保存されたデータが見つかりました。クラウドへ移行すると、全PCで共有できます。
+        この端末に、以前ローカル保存されたデータが見つかりました。クラウドに反映すると全PCで共有できます。
       </p>
-      <button
-        type="button"
-        onClick={() => {
-          if (
-            window.confirm(
-              "この端末のデータをクラウドへ移行します（現在のクラウドデータは上書きされます）。よろしいですか？"
-            )
-          ) {
-            store.migrateFromLocalStorage();
-            setDone(true);
-          }
-        }}
-        className="shrink-0 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-amber-950 hover:bg-amber-400"
-      >
-        クラウドへ移行する
-      </button>
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            if (
+              window.confirm(
+                "この端末のデータを、今のクラウドデータに統合します（既存データは消えません）。よろしいですか？"
+              )
+            ) {
+              store.mergeFromLocalStorage();
+              setDone("merge");
+            }
+          }}
+          className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-amber-950 hover:bg-amber-400"
+        >
+          統合する（既存に追加・推奨）
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (
+              window.confirm(
+                "⚠ 現在のクラウドデータをすべて消して、この端末の内容で置き換えます。本当によろしいですか？"
+              )
+            ) {
+              store.migrateFromLocalStorage();
+              setDone("overwrite");
+            }
+          }}
+          className="text-xs text-amber-700 underline underline-offset-2 hover:text-amber-900 dark:text-amber-400"
+        >
+          上書きで置き換える（既存を消す）
+        </button>
+      </div>
+      <p className="mt-2 text-[11px] text-amber-700/80 dark:text-amber-400/80">
+        ※「統合」は、教材・出席・支援メモなどを足し合わせ、重複だけをまとめます。何も削除しません。
+      </p>
     </div>
   );
 }
