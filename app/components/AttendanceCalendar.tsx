@@ -25,6 +25,7 @@ import { HugImportPanel } from "@/app/components/HugImportPanel";
 import { MaterialAssignment } from "@/app/components/MaterialAssignment";
 import { SupportNote } from "@/app/components/SupportNote";
 import { MaterialMasterPanel } from "@/app/components/MaterialMasterPanel";
+import { useAuth } from "@/app/components/AuthProvider";
 
 type ViewMode = "today" | "week" | "month";
 
@@ -36,6 +37,7 @@ const VIEW_OPTIONS: { value: ViewMode; label: string }[] = [
 
 export default function AttendanceCalendar() {
   const store = useAttendanceStore();
+  const { user, signOut } = useAuth();
   const [today] = useState<Date>(() => startOfDay(new Date()));
   const [view, setView] = useState<ViewMode>("today");
   const [dayDate, setDayDate] = useState<Date>(() => startOfDay(new Date()));
@@ -55,30 +57,50 @@ export default function AttendanceCalendar() {
             支援教材管理アプリ ／ HUGの出席データと提供教材を管理できます
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setImportOpen(true)}
-            className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-          >
-            ↑ HUGデータ取込
-          </button>
-          <button
-            type="button"
-            onClick={() => setMasterOpen(true)}
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-          >
-            📚 教材マスタ
-          </button>
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-          >
-            ⚙ 生徒設定
-          </button>
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+            {user?.email && (
+              <span className="max-w-[180px] truncate" title={user.email}>
+                {user.email}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => signOut()}
+              className="rounded-md border border-zinc-300 px-2 py-1 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+            >
+              ログアウト
+            </button>
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setImportOpen(true)}
+              className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+            >
+              ↑ HUGデータ取込
+            </button>
+            <button
+              type="button"
+              onClick={() => setMasterOpen(true)}
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+            >
+              📚 教材マスタ
+            </button>
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+            >
+              ⚙ 生徒設定
+            </button>
+          </div>
         </div>
       </header>
+
+      {store.hydrated && store.localBackupAvailable && (
+        <MigrationBanner store={store} />
+      )}
 
       {store.hydrated && !store.hasData ? (
         <EmptyImportState onImport={() => setImportOpen(true)} />
@@ -132,6 +154,46 @@ export default function AttendanceCalendar() {
 }
 
 type Store = AttendanceStore;
+
+/* ------------------------------------------------------------------ */
+/* データ移行バナー（この端末のローカルデータ → クラウド）              */
+/* ------------------------------------------------------------------ */
+
+function MigrationBanner({ store }: { store: AttendanceStore }) {
+  const [done, setDone] = useState(false);
+
+  if (done) {
+    return (
+      <div className="mb-4 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+        この端末のデータをクラウドへ移行しました。他のPCでも同じアカウントでログインすると共有されます。
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/30">
+      <p className="text-sm text-amber-800 dark:text-amber-300">
+        この端末に、以前ローカル保存されたデータが見つかりました。クラウドへ移行すると、全PCで共有できます。
+      </p>
+      <button
+        type="button"
+        onClick={() => {
+          if (
+            window.confirm(
+              "この端末のデータをクラウドへ移行します（現在のクラウドデータは上書きされます）。よろしいですか？"
+            )
+          ) {
+            store.migrateFromLocalStorage();
+            setDone(true);
+          }
+        }}
+        className="shrink-0 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-amber-950 hover:bg-amber-400"
+      >
+        クラウドへ移行する
+      </button>
+    </div>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /* 空状態（取込前）                                                      */

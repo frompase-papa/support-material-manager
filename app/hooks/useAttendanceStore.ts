@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
+import { db, WORKSPACE_ID } from "@/app/lib/firebase";
 import {
   DEFAULT_STUDENT_TYPE,
   colorForName,
@@ -20,10 +22,17 @@ import {
   newMaterialId,
   type TeachingMaterial,
 } from "@/app/lib/teachingMaterials";
-import { startOfDay, toDateKey } from "@/app/lib/date";
+import { toDateKey } from "@/app/lib/date";
 import type { ParsedMonth } from "@/app/lib/hugImport";
 
-const STORAGE_KEY = "sm_attendance_v2";
+/** 旧ローカル保存キー（端末→クラウド移行の読み出し元） */
+const LOCAL_BACKUP_KEY = "sm_attendance_v2";
+/** 移行済みフラグ（一度移行したら案内を出さない） */
+const MIGRATED_FLAG_KEY = "sm_migrated_to_cloud";
+
+function makeClientId(): string {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
 
 /** localStorage に保存する状態 */
 interface PersistedState {
@@ -47,6 +56,11 @@ export interface AttendanceStore {
   hasData: boolean;
   students: Student[];
   importedMonths: string[];
+
+  /** この端末にローカル保存された旧データがあるか（クラウド移行の案内用） */
+  localBackupAvailable: boolean;
+  /** 端末のローカルデータをクラウドへ移行する */
+  migrateFromLocalStorage: () => boolean;
 
   getForDate: (date: Date) => ResolvedAttendance[];
   getAbsentNamesOnDate: (date: Date) => string[];
@@ -96,30 +110,66 @@ export function useAttendanceStore(): AttendanceStore {
   const [assignments, setAssignments] = useState<Record<string, string[]>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
 
-  // 復元
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const p = JSON.parse(raw) as Partial<PersistedState>;
-        if (p.typeById) setTypeById(p.typeById);
-        if (p.overrides) setOverrides(p.overrides);
-        if (p.presentByDate) setPresentByDate(p.presentByDate);
-        if (p.absentByDate) setAbsentByDate(p.absentByDate);
-        if (p.materials) setMaterials(p.materials);
-        if (p.assignments) setAssignments(p.assignments);
-        if (p.notes) setNotes(p.notes);
-      }
-    } catch {
-      /* 壊れたデータは無視 */
-    }
-    setHydrated(true);
+  const clientIdRef = useRef<string>("");
+  if (!clientIdRef.current) clientIdRef.current = makeClientId();
+  const lastSyncedRef = useRef<string>("");
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [localBackupAvailable, setLocalBackupAvailable] = useState(false);
+
+  const applyData = useCallback((d: Partial<PersistedState>) => {
+    setTypeById(d.typeById ?? {});
+    setOverrides(d.overrides ?? {});
+    setPresentByDate(d.presentByDate ?? {});
+    setAbsentByDate(d.absentByDate ?? {});
+    if (d.materials) setMaterials(d.materials);
+    setAssignments(d.assignments ?? {});
+    setNotes(d.notes ?? {});
   }, []);
 
-  // 保存
+  // Firestore からリアルタイム購読（他PCの変更も自動反映）
   useEffect(() => {
-    if (!hydrated) return;
-    const data: PersistedState = {
+    const ref = doc(db, "workspace", WORKSPACE_ID);
+    const unsub = onSnapshot(
+      ref,
+      (snap) => {
+        const json = snap.exists()
+          ? (snap.data().json as string | undefined)
+          : undefined;
+        if (json && json !== lastSyncedRef.current) {
+          lastSyncedRef.current = json;
+          try {
+            applyData(JSON.parse(json) as Partial<PersistedState>);
+          } catch {
+            /* 壊れたデータは無視 */
+          }
+        }
+        setHydrated(true);
+      },
+      () => setHydrated(true)
+    );
+    return () => unsub();
+  }, [applyData]);
+
+  // 端末に旧ローカルデータがあるか（クラウド移行の案内用）
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(MIGRATED_FLAG_KEY)) return;
+      const raw = window.localStorage.getItem(LOCAL_BACKUP_KEY);
+      if (raw) {
+        const d = JSON.parse(raw) as Partial<PersistedState>;
+        const hasSomething =
+          (d.presentByDate && Object.keys(d.presentByDate).length > 0) ||
+          (d.materials && d.materials.length > 0) ||
+          (d.notes && Object.keys(d.notes).length > 0);
+        setLocalBackupAvailable(Boolean(hasSomething));
+      }
+    } catch {
+      /* 無視 */
+    }
+  }, []);
+
+  const currentData = useMemo<PersistedState>(
+    () => ({
       typeById,
       overrides,
       presentByDate,
@@ -127,22 +177,55 @@ export function useAttendanceStore(): AttendanceStore {
       materials,
       assignments,
       notes,
+    }),
+    [
+      typeById,
+      overrides,
+      presentByDate,
+      absentByDate,
+      materials,
+      assignments,
+      notes,
+    ]
+  );
+
+  // 変更を Firestore に保存（デバウンス。自分の書き込みは再取込しない）
+  useEffect(() => {
+    if (!hydrated) return;
+    const serialized = JSON.stringify(currentData);
+    if (serialized === lastSyncedRef.current) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      lastSyncedRef.current = serialized;
+      setDoc(
+        doc(db, "workspace", WORKSPACE_ID),
+        {
+          json: serialized,
+          updatedAt: serverTimestamp(),
+          updatedBy: clientIdRef.current,
+        },
+        { merge: true }
+      ).catch(() => {
+        /* 保存失敗（オフライン等）は次の変更時に再送される */
+      });
+    }, 700);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
+  }, [hydrated, currentData]);
+
+  const migrateFromLocalStorage = useCallback((): boolean => {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      const raw = window.localStorage.getItem(LOCAL_BACKUP_KEY);
+      if (!raw) return false;
+      applyData(JSON.parse(raw) as Partial<PersistedState>);
+      window.localStorage.setItem(MIGRATED_FLAG_KEY, "1");
+      setLocalBackupAvailable(false);
+      return true;
     } catch {
-      /* 保存失敗は無視 */
+      return false;
     }
-  }, [
-    hydrated,
-    typeById,
-    overrides,
-    presentByDate,
-    absentByDate,
-    materials,
-    assignments,
-    notes,
-  ]);
+  }, [applyData]);
 
   const students = useMemo<Student[]>(() => {
     const names = new Set<string>();
@@ -419,6 +502,8 @@ export function useAttendanceStore(): AttendanceStore {
     hasData: Object.keys(presentByDate).length > 0,
     students,
     importedMonths,
+    localBackupAvailable,
+    migrateFromLocalStorage,
     getForDate,
     getAbsentNamesOnDate,
     countPendingOnDate,
