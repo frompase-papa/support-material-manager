@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "支援教材 学習記録ブリッジ",
+  "version": "1.0.0",
+  "description": "brain-program の学習開始・結果を支援教材管理アプリへ自動送信します。",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://brain-program-001.com/*",
+    "https://www.brain-program-001.com/*",
+    "https://support-material-manager.vercel.app/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://brain-program-001.com/*",
+        "https://www.brain-program-001.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
