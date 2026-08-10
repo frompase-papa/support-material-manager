@@ -6,6 +6,7 @@ import {
   TM_TYPE_LABEL,
   TM_TYPE_OPTIONS,
   tmTypeBadgeClass,
+  type TeachingMaterial,
   type TeachingMaterialType,
 } from "@/app/lib/teachingMaterials";
 
@@ -24,6 +25,39 @@ export function MaterialMasterPanel({
   const [type, setType] = useState<TeachingMaterialType>("free");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [restoreText, setRestoreText] = useState("");
+  const [restoreMsg, setRestoreMsg] = useState<string | null>(null);
+
+  const handleExport = () => {
+    const json = JSON.stringify(store.materials, null, 2);
+    const blob = new Blob(["﻿" + json], { type: "application/json;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "teaching-materials-backup.json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const handleRestore = () => {
+    setRestoreMsg(null);
+    if (!restoreText.trim()) {
+      setRestoreMsg("復元するJSON（教材データ）を貼り付けてください。");
+      return;
+    }
+    try {
+      const parsed = JSON.parse(restoreText) as unknown;
+      const list = (Array.isArray(parsed) ? parsed : []) as TeachingMaterial[];
+      if (list.length === 0) {
+        setRestoreMsg("教材データが見つかりませんでした（配列のJSONを貼り付けてください）。");
+        return;
+      }
+      const added = store.importMaterials(list);
+      setRestoreMsg(`${added}件を取り込みました（重複は除外）。`);
+      setRestoreText("");
+    } catch {
+      setRestoreMsg("JSONを読み取れませんでした。貼り付け内容をご確認ください。");
+    }
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -209,6 +243,54 @@ export function MaterialMasterPanel({
             ))}
           </ul>
         )}
+
+        {/* バックアップ・復元 */}
+        <details className="mt-6 rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
+          <summary className="cursor-pointer text-sm font-semibold">
+            バックアップ・復元
+          </summary>
+          <div className="mt-3 flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleExport}
+                className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+              >
+                ↓ 現在の教材をバックアップ（JSON書き出し）
+              </button>
+              <span className="text-xs text-zinc-400">
+                いつでも保存しておけば、消えても復元できます
+              </span>
+            </div>
+
+            <div>
+              <p className="mb-1 text-xs text-zinc-500 dark:text-zinc-400">
+                復元：教材データ（JSON配列）を貼り付けて取り込み。既存に統合し、重複は除外します。
+              </p>
+              <textarea
+                value={restoreText}
+                onChange={(e) => setRestoreText(e.target.value)}
+                rows={4}
+                placeholder='[{"id":"...","title":"...","url":"...","type":"free"}, ...]'
+                className="w-full resize-y rounded-lg border border-zinc-300 bg-white p-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-800"
+              />
+              {restoreMsg && (
+                <p className="mt-1 text-sm text-emerald-600 dark:text-emerald-400">
+                  {restoreMsg}
+                </p>
+              )}
+              <div className="mt-2 text-right">
+                <button
+                  type="button"
+                  onClick={handleRestore}
+                  className="rounded-md bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+                >
+                  取り込む（復元）
+                </button>
+              </div>
+            </div>
+          </div>
+        </details>
       </div>
     </div>
   );

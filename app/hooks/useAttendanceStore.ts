@@ -146,6 +146,8 @@ export interface AttendanceStore {
   addMaterial: (input: Omit<TeachingMaterial, "id">) => void;
   updateMaterial: (id: string, patch: Partial<Omit<TeachingMaterial, "id">>) => void;
   deleteMaterial: (id: string) => void;
+  /** 教材を取り込んで既存に統合（同じ内容は重複させない）。追加件数を返す。 */
+  importMaterials: (incoming: TeachingMaterial[]) => number;
 
   // 教材の割り当て（本日の提供教材、最大3）
   getAssignedMaterialIds: (studentId: string, date: Date) => string[];
@@ -586,6 +588,31 @@ export function useAttendanceStore(): AttendanceStore {
     });
   }, []);
 
+  const importMaterials = useCallback(
+    (incoming: TeachingMaterial[]): number => {
+      const sig = new Set(materials.map((m) => `${m.title}|${m.url}`));
+      const ids = new Set(materials.map((m) => m.id));
+      const toAdd: TeachingMaterial[] = [];
+      for (const m of incoming) {
+        if (!m || !m.title) continue;
+        const url = String(m.url ?? "");
+        const key = `${m.title}|${url}`;
+        if (sig.has(key)) continue; // 同じ内容は重複させない
+        sig.add(key);
+        const id = m.id && !ids.has(m.id) ? String(m.id) : newMaterialId();
+        ids.add(id);
+        const type =
+          m.type === "free" || m.type === "sst" || m.type === "other"
+            ? m.type
+            : "other";
+        toAdd.push({ id, title: String(m.title), url, type });
+      }
+      if (toAdd.length) setMaterials((cur) => [...cur, ...toAdd]);
+      return toAdd.length;
+    },
+    [materials]
+  );
+
   // ---- 割り当て ----
   const getAssignedMaterialIds = useCallback(
     (studentId: string, date: Date): string[] =>
@@ -665,6 +692,7 @@ export function useAttendanceStore(): AttendanceStore {
     addMaterial,
     updateMaterial,
     deleteMaterial,
+    importMaterials,
     getAssignedMaterialIds,
     addAssignment,
     removeAssignment,
