@@ -58,12 +58,24 @@ function mergePreferNonEmpty(
 ): PersistedState {
   const pick = <T>(l: T, c: T | undefined): T =>
     isEmptyVal(l) && !isEmptyVal(c) ? (c as T) : l;
+
+  // 教材マスタは初期値がダミー（非空）なので通常のガードでは守れない。
+  // ローカルが「未変更の初期ダミー」または空のときは、クラウドの教材を優先し、
+  // まだ読み込めていない端末がカスタム教材を上書きするのを防ぐ。
+  const localMatUntouched =
+    local.materials === DEFAULT_TEACHING_MATERIALS ||
+    isEmptyVal(local.materials);
+  const materials =
+    localMatUntouched && !isEmptyVal(cloud.materials)
+      ? (cloud.materials as TeachingMaterial[])
+      : local.materials;
+
   return {
     typeById: pick(local.typeById, cloud.typeById),
     overrides: pick(local.overrides, cloud.overrides),
     presentByDate: pick(local.presentByDate, cloud.presentByDate),
     absentByDate: pick(local.absentByDate, cloud.absentByDate),
-    materials: pick(local.materials, cloud.materials),
+    materials,
     assignments: pick(local.assignments, cloud.assignments),
     notes: pick(local.notes, cloud.notes),
   };
