@@ -3,7 +3,7 @@
 //
 // ▼▼▼ 設定：ここを自分の環境に合わせて編集してください ▼▼▼
 const API_BASE = "https://support-material-manager.vercel.app";
-const API_KEY = "CHANGE_ME_SHARED_KEY"; // Vercelの環境変数 STUDY_API_KEY と同じ値にする
+const API_KEY = "smm-study-2026-k7Qp9xR3mZ"; // Vercelの環境変数 STUDY_API_KEY と同じ値
 // ▲▲▲ 設定ここまで ▲▲▲
 
 async function post(path, data) {

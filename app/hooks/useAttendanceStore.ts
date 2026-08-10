@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
+import {
+  doc,
+  onSnapshot,
+  runTransaction,
+  serverTimestamp,
+} from "firebase/firestore";
 import { db, WORKSPACE_ID } from "@/app/lib/firebase";
 import {
   DEFAULT_STUDENT_TYPE,
@@ -32,6 +37,36 @@ const MIGRATED_FLAG_KEY = "sm_migrated_to_cloud";
 
 function makeClientId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+/** null/空配列/空オブジェクト を「空」とみなす */
+function isEmptyVal(v: unknown): boolean {
+  if (v === null || v === undefined) return true;
+  if (Array.isArray(v)) return v.length === 0;
+  if (typeof v === "object") return Object.keys(v).length === 0;
+  return false;
+}
+
+/**
+ * 保存時の安全マージ。各コレクションについて、
+ * 「ローカルが空で、クラウドに中身がある」場合はクラウドを残す。
+ * → まだ読み込めていない/空の状態で、取込済みデータ（HUG等）を消してしまうのを防ぐ。
+ */
+function mergePreferNonEmpty(
+  cloud: Partial<PersistedState>,
+  local: PersistedState
+): PersistedState {
+  const pick = <T>(l: T, c: T | undefined): T =>
+    isEmptyVal(l) && !isEmptyVal(c) ? (c as T) : l;
+  return {
+    typeById: pick(local.typeById, cloud.typeById),
+    overrides: pick(local.overrides, cloud.overrides),
+    presentByDate: pick(local.presentByDate, cloud.presentByDate),
+    absentByDate: pick(local.absentByDate, cloud.absentByDate),
+    materials: pick(local.materials, cloud.materials),
+    assignments: pick(local.assignments, cloud.assignments),
+    notes: pick(local.notes, cloud.notes),
+  };
 }
 
 /** 日付ごとの名簿リストを統合（同じ日は名前をユニオン） */
@@ -147,6 +182,7 @@ export function useAttendanceStore(): AttendanceStore {
     const ref = doc(db, "workspace", WORKSPACE_ID);
     const unsub = onSnapshot(
       ref,
+      { includeMetadataChanges: true },
       (snap) => {
         const json = snap.exists()
           ? (snap.data().json as string | undefined)
@@ -159,7 +195,9 @@ export function useAttendanceStore(): AttendanceStore {
             /* 壊れたデータは無視 */
           }
         }
-        setHydrated(true);
+        // サーバー確定応答（キャッシュではない）を受け取ってから保存を許可する。
+        // → クラウドの最新を読み込む前に、空データで上書きしてしまう事故を防ぐ。
+        if (!snap.metadata.fromCache) setHydrated(true);
       },
       () => setHydrated(true)
     );
@@ -212,23 +250,48 @@ export function useAttendanceStore(): AttendanceStore {
     if (serialized === lastSyncedRef.current) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      lastSyncedRef.current = serialized;
-      setDoc(
-        doc(db, "workspace", WORKSPACE_ID),
-        {
-          json: serialized,
-          updatedAt: serverTimestamp(),
-          updatedBy: clientIdRef.current,
-        },
-        { merge: true }
-      ).catch(() => {
-        /* 保存失敗（オフライン等）は次の変更時に再送される */
-      });
+      const localData = currentData;
+      const ref = doc(db, "workspace", WORKSPACE_ID);
+      // トランザクションで「今のクラウドの最新」を読んでから安全にマージして書く。
+      runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        let cloud: Partial<PersistedState> = {};
+        if (snap.exists()) {
+          const j = snap.data().json;
+          if (typeof j === "string") {
+            try {
+              cloud = JSON.parse(j) as Partial<PersistedState>;
+            } catch {
+              /* 壊れたクラウドデータは無視 */
+            }
+          }
+        }
+        const merged = mergePreferNonEmpty(cloud, localData);
+        const mergedJson = JSON.stringify(merged);
+        tx.set(
+          ref,
+          {
+            json: mergedJson,
+            updatedAt: serverTimestamp(),
+            updatedBy: clientIdRef.current,
+          },
+          { merge: true }
+        );
+        return { merged, mergedJson };
+      })
+        .then(({ merged, mergedJson }) => {
+          lastSyncedRef.current = mergedJson;
+          // クラウド側にしか無かったデータが補完された場合は、ローカルにも反映
+          if (mergedJson !== serialized) applyData(merged);
+        })
+        .catch(() => {
+          /* 保存失敗（オフライン等）は次の変更時に再送される */
+        });
     }, 700);
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [hydrated, currentData]);
+  }, [hydrated, currentData, applyData]);
 
   // 上書き：この端末のデータでクラウドを置き換える
   const migrateFromLocalStorage = useCallback((): boolean => {
