@@ -34,11 +34,6 @@ function startOfToday(): Date {
   return d;
 }
 
-function fmtTime(d: Date | null): string {
-  if (!d) return "—";
-  return d.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
-}
-
 /** 表示名（生徒名。無ければ空） */
 function nameOf(e: StudyEvent): string {
   return (e.studentName ?? "").trim();
@@ -102,7 +97,7 @@ export function StudyDashboard() {
     [events]
   );
 
-  // 生徒名で束ねる（各生徒＝新しい順、生徒の並びは最新活動順）
+  // 生徒名で束ねる（各生徒＝やった順＝古い→新しい、生徒の並びは最近やった順）
   const groups = useMemo(() => {
     const map = new Map<string, StudyEvent[]>();
     for (const e of realFinishes) {
@@ -111,16 +106,18 @@ export function StudyDashboard() {
       if (list) list.push(e);
       else map.set(name, [e]);
     }
-    for (const list of map.values()) {
-      list.sort(
-        (a, b) => (b.receivedAt?.getTime() ?? 0) - (a.receivedAt?.getTime() ?? 0)
+    const arr = [...map.entries()].map(([name, list]) => {
+      const sorted = [...list].sort(
+        (a, b) => (a.receivedAt?.getTime() ?? 0) - (b.receivedAt?.getTime() ?? 0)
       );
-    }
-    return [...map.entries()].sort(
-      (a, b) =>
-        (b[1][0]?.receivedAt?.getTime() ?? 0) -
-        (a[1][0]?.receivedAt?.getTime() ?? 0)
-    );
+      const latest = sorted.reduce(
+        (mx, e) => Math.max(mx, e.receivedAt?.getTime() ?? 0),
+        0
+      );
+      return { name, list: sorted, latest };
+    });
+    arr.sort((a, b) => b.latest - a.latest);
+    return arr;
   }, [realFinishes]);
 
   // 除外された件数（生徒名が取れなかった＝番号などの記録）
@@ -232,8 +229,8 @@ export function StudyDashboard() {
         </div>
       ) : (
         <div className="flex flex-col gap-5">
-          {groups.map(([name, list]) => (
-            <StudentGroup key={name} name={name} records={list} />
+          {groups.map((g) => (
+            <StudentGroup key={g.name} name={g.name} records={g.list} />
           ))}
         </div>
       )}
@@ -255,32 +252,46 @@ function StudentGroup({
   name: string;
   records: StudyEvent[];
 }) {
-  const latest = records[0];
+  const [copied, setCopied] = useState(false);
+
+  const copyText = () => {
+    // タイトル<TAB>点数 を、やった順で。そのままExcel等に貼れる形。
+    const text = records
+      .map((e) => `${e.title ?? ""}\t${e.score ?? ""}`)
+      .join("\n");
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => {});
+  };
+
   return (
     <section className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
-      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-zinc-100 bg-zinc-50 px-4 py-2.5 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100 bg-zinc-50 px-4 py-2.5 dark:border-zinc-800 dark:bg-zinc-900">
         <div className="flex items-baseline gap-2">
           <h2 className="text-base font-bold">{name}</h2>
           <span className="text-xs text-zinc-500 dark:text-zinc-400">
             {records.length}件
           </span>
         </div>
-        {latest?.cumulative != null && (
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">
-            累計 {latest.cumulative.toLocaleString()} ポイント
-          </span>
-        )}
+        <button
+          type="button"
+          onClick={copyText}
+          className="rounded-md border border-zinc-300 px-3 py-1 text-xs font-medium hover:bg-white dark:border-zinc-700 dark:hover:bg-zinc-800"
+        >
+          {copied ? "✓ コピーしました" : "📋 コピー"}
+        </button>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[560px] border-collapse text-sm">
+        <table className="w-full min-w-[360px] border-collapse text-sm">
           <thead className="text-left text-xs text-zinc-500 dark:text-zinc-400">
             <tr>
-              <th className="px-4 py-2 font-medium">時刻</th>
               <th className="px-4 py-2 font-medium">タイトル</th>
               <th className="px-4 py-2 text-right font-medium tabular-nums">点数</th>
-              <th className="px-4 py-2 text-right font-medium tabular-nums">平均</th>
-              <th className="px-4 py-2 text-right font-medium tabular-nums">最高</th>
             </tr>
           </thead>
           <tbody>
@@ -289,18 +300,9 @@ function StudentGroup({
                 key={e.id}
                 className="border-t border-zinc-100 dark:border-zinc-800/70"
               >
-                <td className="whitespace-nowrap px-4 py-2 text-zinc-500 tabular-nums">
-                  {fmtTime(e.receivedAt)}
-                </td>
                 <td className="px-4 py-2">{e.title ?? "—"}</td>
                 <td className="px-4 py-2 text-right font-semibold tabular-nums">
                   {e.score ?? "—"}
-                </td>
-                <td className="px-4 py-2 text-right text-zinc-500 tabular-nums">
-                  {e.average ?? "—"}
-                </td>
-                <td className="px-4 py-2 text-right text-zinc-500 tabular-nums">
-                  {e.max ?? "—"}
                 </td>
               </tr>
             ))}
