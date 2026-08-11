@@ -95,7 +95,9 @@ export function MaterialAssignment({
         >
           <option value="">＋ 教材を追加…</option>
           {TM_TYPE_OPTIONS.map((opt) => {
-            const group = available.filter((m) => m.type === opt.value);
+            const group = available
+              .filter((m) => m.type === opt.value)
+              .sort((a, b) => a.title.localeCompare(b.title, "ja"));
             if (group.length === 0) return null;
             return (
               <optgroup key={opt.value} label={opt.label}>

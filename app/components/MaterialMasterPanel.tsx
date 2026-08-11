@@ -194,7 +194,9 @@ export function MaterialMasterPanel({
           <p className="text-xs text-zinc-400">まだ登録がありません。</p>
         ) : (
           <ul className="flex flex-col gap-2">
-            {store.materials.map((m) => (
+            {[...store.materials]
+              .sort((a, b) => a.title.localeCompare(b.title, "ja"))
+              .map((m) => (
               <li
                 key={m.id}
                 className="flex items-center gap-2 rounded-lg border border-zinc-200 p-2.5 dark:border-zinc-800"
