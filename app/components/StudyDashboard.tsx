@@ -34,6 +34,16 @@ function startOfToday(): Date {
   return d;
 }
 
+function fmtDateTime(d: Date | null): string {
+  if (!d) return "—";
+  return d.toLocaleString("ja-JP", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 /** 表示名（生徒名。無ければ空） */
 function nameOf(e: StudyEvent): string {
   return (e.studentName ?? "").trim();
@@ -50,6 +60,7 @@ export function StudyDashboard() {
   const [events, setEvents] = useState<StudyEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
 
   useEffect(() => {
     const q = query(
@@ -241,6 +252,73 @@ export function StudyDashboard() {
           件（番号のみ等）は一覧から除外しています。
         </p>
       )}
+
+      {/* 診断：本日届いた全イベント（切り分け用） */}
+      <div className="mt-8 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+        <button
+          type="button"
+          onClick={() => setShowRaw((v) => !v)}
+          className="text-xs text-zinc-500 underline underline-offset-2 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+        >
+          {showRaw
+            ? "診断を隠す"
+            : `🐞 診断：本日届いた全データを表示（${events.length}件）`}
+        </button>
+        {showRaw && (
+          <div className="mt-3">
+            <p className="mb-2 text-xs text-zinc-500 dark:text-zinc-400">
+              拡張機能から届いた“生”のデータです。ここに出ていれば「届いている」、
+              空なら「そもそも届いていない（拡張未導入・送信エラー等）」の切り分けができます。
+            </p>
+            <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
+              <table className="w-full min-w-[680px] border-collapse text-xs">
+                <thead className="bg-zinc-50 text-left text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">受信</th>
+                    <th className="px-3 py-2 font-medium">種別</th>
+                    <th className="px-3 py-2 font-medium">生徒ID</th>
+                    <th className="px-3 py-2 font-medium">生徒名</th>
+                    <th className="px-3 py-2 font-medium">タイトル</th>
+                    <th className="px-3 py-2 text-right font-medium">点数</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {events.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="px-3 py-4 text-center text-zinc-400"
+                      >
+                        本日届いたデータはありません
+                      </td>
+                    </tr>
+                  ) : (
+                    events.map((e) => (
+                      <tr
+                        key={e.id}
+                        className="border-t border-zinc-100 dark:border-zinc-800/70"
+                      >
+                        <td className="whitespace-nowrap px-3 py-1.5 text-zinc-500">
+                          {fmtDateTime(e.receivedAt)}
+                        </td>
+                        <td className="px-3 py-1.5">{e.type}</td>
+                        <td className="px-3 py-1.5 text-zinc-500">
+                          {e.studentId || "—"}
+                        </td>
+                        <td className="px-3 py-1.5">{e.studentName ?? "（なし）"}</td>
+                        <td className="px-3 py-1.5">{e.title ?? "—"}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">
+                          {e.score ?? "—"}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
