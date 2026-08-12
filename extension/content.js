@@ -19,6 +19,38 @@ function log(...a) {
   if (CONFIG.debug) console.log("[学習記録ブリッジ]", ...a);
 }
 
+// 画面すみの「記録中」表示（拡張が動いているか一目で分かるように）
+function ensureIndicator() {
+  if (!document.body) return null;
+  let el = document.getElementById("smm-rec-indicator");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "smm-rec-indicator";
+    el.style.cssText =
+      "position:fixed;bottom:8px;right:8px;z-index:2147483647;" +
+      "background:rgba(16,185,129,.92);color:#fff;font:600 12px/1.4 sans-serif;" +
+      "padding:4px 10px;border-radius:9999px;box-shadow:0 1px 4px rgba(0,0,0,.3);" +
+      "pointer-events:none;user-select:none;";
+    el.textContent = "📡 記録中";
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+function flashIndicator(msg, ok) {
+  const el = ensureIndicator();
+  if (!el) return;
+  el.textContent = msg;
+  el.style.background = ok
+    ? "rgba(37,99,235,.95)" // 青：送信
+    : "rgba(220,38,38,.95)"; // 赤：失敗
+  clearTimeout(el.__t);
+  el.__t = setTimeout(() => {
+    el.textContent = "📡 記録中";
+    el.style.background = "rgba(16,185,129,.92)";
+  }, 2800);
+}
+
 function getParams() {
   const p = new URLSearchParams(location.search);
   return {
@@ -127,9 +159,10 @@ function handleStart() {
     startTime: new Date().toISOString(),
   };
   log("開始を送信", payload);
-  chrome.runtime.sendMessage({ type: "study/start", payload }, (r) =>
-    log("開始の応答", r)
-  );
+  chrome.runtime.sendMessage({ type: "study/start", payload }, (r) => {
+    log("開始の応答", r);
+    flashIndicator("▶ 開始を送信", r && r.ok);
+  });
 }
 
 function handleFinish() {
@@ -145,9 +178,11 @@ function handleFinish() {
   lastFinishSig = sig;
 
   log("結果を送信", data);
-  chrome.runtime.sendMessage({ type: "study/finish", payload: data }, (r) =>
-    log("結果の応答", r)
-  );
+  chrome.runtime.sendMessage({ type: "study/finish", payload: data }, (r) => {
+    log("結果の応答", r);
+    const label = `${data.title ?? "結果"} ${data.score ?? ""}点`;
+    flashIndicator(r && r.ok ? `✓ 送信: ${label}` : "⚠ 送信失敗", r && r.ok);
+  });
 }
 
 function handleAll() {
@@ -158,6 +193,7 @@ function handleAll() {
 // URL変化の監視（SPA対応）
 let lastUrl = location.href;
 setInterval(() => {
+  ensureIndicator(); // 消えないように毎回確保
   if (location.href !== lastUrl) {
     lastUrl = location.href;
     log("画面遷移:", location.href);
@@ -176,5 +212,6 @@ const mo = new MutationObserver(() => {
 mo.observe(document.documentElement, { childList: true, subtree: true });
 
 // 初回
+ensureIndicator();
 setTimeout(handleAll, 500);
 log("起動しました。URL:", location.href);
