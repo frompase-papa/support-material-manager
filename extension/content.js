@@ -20,8 +20,14 @@ function log(...a) {
 }
 
 // 画面すみの「記録中」表示（拡張が動いているか一目で分かるように）
+// 全画面（フルスクリーン）中は、フルスクリーン要素の中に入れないと隠れるので、
+// 表示先を fullscreenElement に切り替える。
 function ensureIndicator() {
-  if (!document.body) return null;
+  const target =
+    document.fullscreenElement ||
+    document.webkitFullscreenElement ||
+    document.body;
+  if (!target) return null;
   let el = document.getElementById("smm-rec-indicator");
   if (!el) {
     el = document.createElement("div");
@@ -32,8 +38,8 @@ function ensureIndicator() {
       "padding:4px 10px;border-radius:9999px;box-shadow:0 1px 4px rgba(0,0,0,.3);" +
       "pointer-events:none;user-select:none;";
     el.textContent = "📡 記録中";
-    document.body.appendChild(el);
   }
+  if (el.parentElement !== target) target.appendChild(el);
   return el;
 }
 
@@ -210,6 +216,10 @@ const mo = new MutationObserver(() => {
   moTimer = setTimeout(handleAll, 400);
 });
 mo.observe(document.documentElement, { childList: true, subtree: true });
+
+// 全画面の出入りに追従（表示先を切り替える）
+document.addEventListener("fullscreenchange", ensureIndicator);
+document.addEventListener("webkitfullscreenchange", ensureIndicator);
 
 // 初回
 ensureIndicator();
