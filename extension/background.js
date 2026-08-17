@@ -1,12 +1,25 @@
 // バックグラウンド（Service Worker）。
 // content.js から受け取ったデータを、自作アプリの受信APIへPOSTする。
 //
-// ▼▼▼ 設定：ここを自分の環境に合わせて編集してください ▼▼▼
-const API_BASE = "https://support-material-manager.vercel.app";
-const API_KEY = "smm-study-2026-k7Qp9xR3mZ"; // Vercelの環境変数 STUDY_API_KEY と同じ値
+// ▼▼▼ 設定は config.js に分離（git管理外。ひな型は config.example.js） ▼▼▼
+try {
+  importScripts("config.js");
+} catch (e) {
+  console.error(
+    "[学習記録ブリッジ] config.js を読み込めませんでした。" +
+      "config.example.js をコピーして config.js を作ってください。",
+    e
+  );
+}
+const API_BASE = (self.SMM_CONFIG && self.SMM_CONFIG.API_BASE) || "";
+const API_KEY = (self.SMM_CONFIG && self.SMM_CONFIG.API_KEY) || "";
 // ▲▲▲ 設定ここまで ▲▲▲
 
 async function post(path, data) {
+  if (!API_BASE || !API_KEY) {
+    console.error("[学習記録ブリッジ] 設定が未完了です（config.js を確認）");
+    return { ok: false, error: "not configured" };
+  }
   try {
     const res = await fetch(API_BASE + path, {
       method: "POST",

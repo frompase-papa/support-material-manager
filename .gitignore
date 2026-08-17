@@ -37,6 +37,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# 拡張機能のAPIキー等（ひな型は config.example.js）
+/extension/config.js
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

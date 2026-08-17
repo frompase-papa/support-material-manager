@@ -6,11 +6,22 @@ export const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Headers": "Content-Type, x-api-key",
 };
 
-/** x-api-key ヘッダーが環境変数 STUDY_API_KEY と一致するか */
+/**
+ * x-api-key ヘッダーが環境変数 STUDY_API_KEY と一致するか。
+ *
+ * STUDY_API_KEY は **カンマ区切りで複数**指定できる（例: "旧キー,新キー"）。
+ * キーを更新するとき、一時的に旧・新の両方を有効にしておけば、
+ * タブレット側の拡張機能を入れ替えるまで記録が止まらない。
+ * 入れ替え完了後に旧キーを消せば失効する。
+ */
 export function checkApiKey(req: Request): boolean {
   const key = req.headers.get("x-api-key");
-  const expected = process.env.STUDY_API_KEY;
-  return Boolean(expected) && key === expected;
+  if (!key) return false;
+  const allowed = (process.env.STUDY_API_KEY ?? "")
+    .split(",")
+    .map((k) => k.trim())
+    .filter(Boolean);
+  return allowed.includes(key);
 }
 
 /** "184pt" や "8866" のような文字列から数値を取り出す。取れなければ null。 */

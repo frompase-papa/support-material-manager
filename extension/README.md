@@ -5,15 +5,19 @@ brain-program の学習「開始」と「結果（得点）」を検知して、
 ダッシュボード（`/study`）にリアルタイム表示されます。
 
 ## 1. 設定（必須）
-`background.js` の先頭を編集します。
+`config.example.js` をコピーして **`config.js`** を作り、値を埋めます。
 
 ```js
-const API_BASE = "https://support-material-manager.vercel.app"; // 本番URL
-const API_KEY  = "（Vercelの環境変数 STUDY_API_KEY と同じ値）";
+self.SMM_CONFIG = {
+  API_BASE: "https://support-material-manager.vercel.app", // 本番URL
+  API_KEY: "（Vercelの環境変数 STUDY_API_KEY と同じ値）",
+};
 ```
 
+- `config.js` は **`.gitignore` 済み**です。APIキーをソースに直書きして GitHub に上げないための分離なので、**このファイルをコミットしないでください**。
 - `API_KEY` は、アプリ側（Vercel）に設定する `STUDY_API_KEY` と **同じ文字列** にします。
-- 適当な長めのランダム文字列を1つ決めて、両方に同じものを入れてください。
+- Vercel 側の `STUDY_API_KEY` は **カンマ区切りで複数**指定できます（例: `旧キー,新キー`）。
+  キーを変えるときは一時的に両方を有効にしておけば、タブレットを入れ替えるまで記録が止まりません。
 
 ## 2. インストール
 
@@ -22,13 +26,15 @@ const API_KEY  = "（Vercelの環境変数 STUDY_API_KEY と同じ値）";
 2. 右上の「デベロッパー モード」をON
 3. 「パッケージ化されていない拡張機能を読み込む」→ この `extension` フォルダを選択
 
-### B. Androidタブレット（Kiwi Browser・本番用）
-Kiwi はフォルダを直接読めないので、**zipにして**読み込みます。
+### B. Androidタブレット（Mises Browser・本番用）
+Mises はフォルダを直接読めないので、**zipにして**読み込みます。
 1. この `extension` フォルダの**中身**（`manifest.json` が **zipの直下**に来るように）をzip圧縮する
    - ※ フォルダごとではなく「中身」をzipにするのがポイント
-2. Kiwi のメニュー →「拡張機能（Extensions）」
+   - ※ **`config.js` を必ず含める**こと（無いとキーが読めず送信できません）
+2. Mises のメニュー →「拡張機能（Extensions）」
 3. 「デベロッパー モード」をON →「＋（.zip/.crx/.user.js から）」→ 作ったzipを選択
 4. 有効化する
+5. **brain-program のタブを開き直す**（既に開いていたタブには拡張が入りません）
 
 ## 3. 使い方
 - タブレットで brain-program に生徒がログインし、**問題を開始**すると「開始」が送信されます。
