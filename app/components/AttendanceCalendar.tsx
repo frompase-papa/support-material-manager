@@ -6,7 +6,11 @@ import {
   useAttendanceStore,
   type AttendanceStore,
 } from "@/app/hooks/useAttendanceStore";
-import { type ResolvedAttendance } from "@/app/lib/attendance";
+import {
+  MATERIAL_LABEL,
+  type Material,
+  type ResolvedAttendance,
+} from "@/app/lib/attendance";
 import type { Student } from "@/app/lib/students";
 import {
   WEEKDAY_LABELS,
@@ -29,6 +33,38 @@ import { MaterialMasterPanel } from "@/app/components/MaterialMasterPanel";
 import { useAuth } from "@/app/components/AuthProvider";
 
 type ViewMode = "today" | "week" | "month";
+
+/** 教材グループの表示順。PCでは左=カリキュラム、右=タブレットになる。 */
+const MATERIAL_ORDER: Material[] = ["curriculum", "tablet"];
+
+/** 出席一覧を教材（カリキュラム / タブレット）ごとに振り分ける */
+function groupByMaterial(
+  items: ResolvedAttendance[]
+): Record<Material, ResolvedAttendance[]> {
+  return {
+    curriculum: items.filter((i) => i.material === "curriculum"),
+    tablet: items.filter((i) => i.material === "tablet"),
+  };
+}
+
+/** 教材ごとの配色（MaterialToggle の選択色に合わせる） */
+const MATERIAL_STYLE: Record<
+  Material,
+  { chip: string; frame: string; dot: string }
+> = {
+  curriculum: {
+    chip: "bg-amber-400 text-amber-950",
+    frame:
+      "border-amber-200 bg-amber-50/50 dark:border-amber-900/60 dark:bg-amber-950/10",
+    dot: "bg-amber-400",
+  },
+  tablet: {
+    chip: "bg-emerald-500 text-white",
+    frame:
+      "border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/60 dark:bg-emerald-950/10",
+    dot: "bg-emerald-500",
+  },
+};
 
 const VIEW_OPTIONS: { value: ViewMode; label: string }[] = [
   { value: "today", label: "今日" },
@@ -412,6 +448,54 @@ function AttendanceRow({
 }
 
 /* ------------------------------------------------------------------ */
+/* 教材グループの列（カリキュラム / タブレット）                          */
+/* ------------------------------------------------------------------ */
+
+function MaterialColumn({
+  material,
+  items,
+  date,
+  store,
+}: {
+  material: Material;
+  items: ResolvedAttendance[];
+  date: Date;
+  store: Store;
+}) {
+  const style = MATERIAL_STYLE[material];
+
+  return (
+    <section className={`rounded-2xl border p-3 ${style.frame}`}>
+      <h3 className="mb-3 flex items-center gap-2">
+        <span className={`rounded-md px-2.5 py-1 text-sm font-bold ${style.chip}`}>
+          {MATERIAL_LABEL[material]}
+        </span>
+        <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+          {items.length}名
+        </span>
+      </h3>
+
+      {items.length === 0 ? (
+        <p className="py-6 text-center text-xs text-zinc-400 dark:text-zinc-500">
+          この日は該当なし
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {items.map((item) => (
+            <AttendanceRow
+              key={item.record.id}
+              item={item}
+              date={date}
+              store={store}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* 日ビュー（前日・翌日・任意日付を選んで教材選定）                       */
 /* ------------------------------------------------------------------ */
 
@@ -427,6 +511,7 @@ function DayView({
   onMove: (d: Date) => void;
 }) {
   const items = store.getForDate(date);
+  const grouped = groupByMaterial(items);
   const pending = items.filter((r) => r.requiresSelection).length;
   const absentNames = store.getAbsentNamesOnDate(date);
   const unattended = store.getUnattendedStudents(date);
@@ -494,9 +579,16 @@ function DayView({
       {items.length === 0 ? (
         <EmptyState message="この日の出席予定はありません（休業日、または未取込の可能性があります）。" />
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {items.map((item) => (
-            <AttendanceRow key={item.record.id} item={item} date={date} store={store} />
+        /* PC: 左=カリキュラム / 右=タブレット、スマホ: 縦に積む */
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:items-start">
+          {MATERIAL_ORDER.map((material) => (
+            <MaterialColumn
+              key={material}
+              material={material}
+              items={grouped[material]}
+              date={date}
+              store={store}
+            />
           ))}
         </div>
       )}
@@ -565,6 +657,7 @@ function WeekView({
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {days.map((day) => {
           const items = store.getForDate(day);
+          const grouped = groupByMaterial(items);
           const isToday = isSameDay(day, today);
           return (
             <div
@@ -592,16 +685,38 @@ function WeekView({
               {items.length === 0 ? (
                 <p className="py-2 text-xs text-zinc-300 dark:text-zinc-600">出席なし</p>
               ) : (
-                <div className="flex flex-col gap-2">
-                  {items.map((item) => (
-                    <AttendanceRow
-                      key={item.record.id}
-                      item={item}
-                      date={day}
-                      store={store}
-                      compact
-                    />
-                  ))}
+                /* 週ビューは幅が狭いので、左右ではなく縦にグループ分けする */
+                <div className="flex flex-col gap-3">
+                  {MATERIAL_ORDER.map((material) => {
+                    const group = grouped[material];
+                    if (group.length === 0) return null;
+                    return (
+                      <div key={material}>
+                        <div className="mb-1.5 flex items-center gap-1.5">
+                          <span
+                            className={`h-2 w-2 rounded-full ${MATERIAL_STYLE[material].dot}`}
+                          />
+                          <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
+                            {MATERIAL_LABEL[material]}
+                          </span>
+                          <span className="text-[10px] text-zinc-400">
+                            {group.length}名
+                          </span>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          {group.map((item) => (
+                            <AttendanceRow
+                              key={item.record.id}
+                              item={item}
+                              date={day}
+                              store={store}
+                              compact
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
