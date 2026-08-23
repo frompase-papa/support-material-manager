@@ -24,3 +24,48 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ------------------------------------------------------------------ */
+/* 印刷（今週のカリキュラム内容シート）                                  */
+/* 用紙はA4横・余白8mm。シート以外は印刷しない。                          */
+/* ------------------------------------------------------------------ */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+
+  html,
+  body {
+    height: auto !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /*
+   * シートは body 直下（ポータル）に出しているので、それ以外を display:none で消す。
+   * visibility:hidden だと場所が残り、白紙ページが大量に出てしまう。
+   */
+  body > *:not(#week-print-portal) {
+    display: none !important;
+  }
+
+  /* オーバーレイの装飾を落として、用紙だけが残るようにする */
+  #week-print-portal {
+    position: static !important;
+    inset: auto !important;
+    z-index: auto !important;
+    overflow: visible !important;
+    background: none !important;
+    padding: 0 !important;
+  }
+
+  #week-print-sheet {
+    margin: 0 !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+    /* 見出しの背景色をプリンタでも出す */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

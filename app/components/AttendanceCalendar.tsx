@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   useAttendanceStore,
@@ -30,6 +30,7 @@ import { HugImportPanel } from "@/app/components/HugImportPanel";
 import { MaterialAssignment } from "@/app/components/MaterialAssignment";
 import { SupportNote } from "@/app/components/SupportNote";
 import { MaterialMasterPanel } from "@/app/components/MaterialMasterPanel";
+import { WeekPrintSheet } from "@/app/components/WeekPrintSheet";
 import { useAuth } from "@/app/components/AuthProvider";
 
 type ViewMode = "today" | "week" | "month";
@@ -328,12 +329,15 @@ function PeriodNav({
   onNext,
   onToday,
   todayLabel,
+  actions,
 }: {
   title: string;
   onPrev: () => void;
   onNext: () => void;
   onToday: () => void;
   todayLabel: string;
+  /** 「今日へ」ボタンの左に差し込む追加ボタン（印刷など） */
+  actions?: ReactNode;
 }) {
   return (
     <div className="mb-4 flex items-center justify-between gap-3">
@@ -356,13 +360,16 @@ function PeriodNav({
         </button>
         <h2 className="ml-2 text-lg font-semibold">{title}</h2>
       </div>
-      <button
-        type="button"
-        onClick={onToday}
-        className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-      >
-        {todayLabel}
-      </button>
+      <div className="flex items-center gap-2">
+        {actions}
+        <button
+          type="button"
+          onClick={onToday}
+          className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        >
+          {todayLabel}
+        </button>
+      </div>
     </div>
   );
 }
@@ -639,6 +646,7 @@ function WeekView({
   today: Date;
   onMove: (d: Date) => void;
 }) {
+  const [printOpen, setPrintOpen] = useState(false);
   const days = useMemo(() => getWeekDays(anchor), [anchor]);
   const rangeTitle = `${days[0].getMonth() + 1}/${days[0].getDate()} 〜 ${
     days[6].getMonth() + 1
@@ -652,6 +660,16 @@ function WeekView({
         onNext={() => onMove(addDays(anchor, 7))}
         onToday={() => onMove(today)}
         todayLabel="今週へ"
+        actions={
+          <button
+            type="button"
+            onClick={() => setPrintOpen(true)}
+            title="今週のカリキュラム内容をA4横1枚で印刷します"
+            className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            🖨 印刷
+          </button>
+        }
       />
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -723,6 +741,14 @@ function WeekView({
           );
         })}
       </div>
+
+      {printOpen && (
+        <WeekPrintSheet
+          store={store}
+          days={days}
+          onClose={() => setPrintOpen(false)}
+        />
+      )}
     </section>
   );
 }
