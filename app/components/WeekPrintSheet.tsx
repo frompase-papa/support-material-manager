@@ -3,7 +3,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AttendanceStore } from "@/app/hooks/useAttendanceStore";
-import { WEEKDAY_LABELS } from "@/app/lib/date";
+import { WEEKDAY_LABELS, formatFullDate } from "@/app/lib/date";
 import {
   TM_TYPE_LABEL,
   type TeachingMaterial,
@@ -81,6 +81,9 @@ export function WeekPrintSheet({
       // カリキュラムが0名でも、タブレットの生徒がいる日は列を残す
       .filter((col) => col.curriculum.length > 0 || col.tablet.length > 0);
   }, [days, store]);
+
+  // プレビューを開いた時点で固定する（開いたまま日付が変わってもズレないように）
+  const [printedAt] = useState(() => new Date());
 
   const rangeLabel = `${dayLabel(days[0])}〜 ${dayLabel(days[6])}`;
   const curriculumCount = columns.reduce((n, c) => n + c.curriculum.length, 0);
@@ -181,8 +184,10 @@ export function WeekPrintSheet({
           <div className="mb-1.5 flex shrink-0 items-baseline gap-3 border-b-2 border-black pb-1">
             <h1 className="text-[15pt] font-bold">今週のカリキュラム内容</h1>
             <span className="text-[10pt] font-semibold">{rangeLabel}</span>
-            <span className="ml-auto text-[8pt]">
+            <span className="ml-auto text-right text-[8pt] leading-tight">
               カリキュラム {curriculumCount} 名 ／ タブレット {tabletCount} 名
+              <br />
+              印刷日：{formatFullDate(printedAt)}
             </span>
           </div>
 
