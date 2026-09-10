@@ -31,6 +31,10 @@ import { MaterialAssignment } from "@/app/components/MaterialAssignment";
 import { SupportNote } from "@/app/components/SupportNote";
 import { MaterialMasterPanel } from "@/app/components/MaterialMasterPanel";
 import { WeekPrintSheet } from "@/app/components/WeekPrintSheet";
+import {
+  AssessmentSheetPanel,
+  isSafeHttpUrl,
+} from "@/app/components/AssessmentSheetPanel";
 import { useAuth } from "@/app/components/AuthProvider";
 
 type ViewMode = "today" | "week" | "month";
@@ -83,6 +87,8 @@ export default function AttendanceCalendar() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [masterOpen, setMasterOpen] = useState(false);
+  const [assessmentOpen, setAssessmentOpen] = useState(false);
+  const assessmentReady = isSafeHttpUrl(store.assessmentUrl);
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
@@ -131,6 +137,37 @@ export default function AttendanceCalendar() {
             >
               📚 教材マスタ
             </button>
+            {/* カリキュラムアセスメントシート（URLは教室ごとに登録） */}
+            {assessmentReady ? (
+              <span className="inline-flex overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
+                <a
+                  href={store.assessmentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="カリキュラムアセスメントシートを別タブで開く"
+                  className="px-3 py-2 text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                >
+                  📋 アセスメントシート ↗
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setAssessmentOpen(true)}
+                  aria-label="アセスメントシートのURLを変更"
+                  title="URLを変更"
+                  className="border-l border-zinc-300 px-2 py-2 text-sm text-zinc-500 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                >
+                  ⚙
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setAssessmentOpen(true)}
+                className="rounded-lg border border-dashed border-zinc-400 px-3 py-2 text-sm font-medium text-zinc-500 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
+              >
+                📋 アセスメントシート（URL未登録）
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setSettingsOpen(true)}
@@ -192,6 +229,13 @@ export default function AttendanceCalendar() {
       )}
       {masterOpen && (
         <MaterialMasterPanel store={store} onClose={() => setMasterOpen(false)} />
+      )}
+      {assessmentOpen && (
+        <AssessmentSheetPanel
+          url={store.assessmentUrl}
+          onSave={store.setAssessmentUrl}
+          onClose={() => setAssessmentOpen(false)}
+        />
       )}
     </div>
   );

@@ -39,10 +39,11 @@ function makeClientId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-/** null/空配列/空オブジェクト を「空」とみなす */
+/** null/空配列/空オブジェクト/空文字 を「空」とみなす */
 function isEmptyVal(v: unknown): boolean {
   if (v === null || v === undefined) return true;
   if (Array.isArray(v)) return v.length === 0;
+  if (typeof v === "string") return v.trim() === "";
   if (typeof v === "object") return Object.keys(v).length === 0;
   return false;
 }
@@ -78,6 +79,7 @@ function mergePreferNonEmpty(
     materials,
     assignments: pick(local.assignments, cloud.assignments),
     notes: pick(local.notes, cloud.notes),
+    assessmentUrl: pick(local.assessmentUrl, cloud.assessmentUrl),
   };
 }
 
@@ -104,6 +106,8 @@ interface PersistedState {
   materials: TeachingMaterial[];
   assignments: Record<string, string[]>; // recordId -> 教材id[]
   notes: Record<string, string>; // studentId -> 支援メモ
+  /** カリキュラムアセスメントシート（Googleスプレッドシート等）のURL */
+  assessmentUrl: string;
 }
 
 export interface ImportResult {
@@ -157,6 +161,10 @@ export interface AttendanceStore {
   // 支援情報メモ
   getNote: (studentId: string) => string;
   setNote: (studentId: string, text: string) => void;
+
+  // カリキュラムアセスメントシート（教室ごとにURLが異なるので登録制）
+  assessmentUrl: string;
+  setAssessmentUrl: (url: string) => void;
 }
 
 function monthKey(year: number, month: number): string {
@@ -174,6 +182,7 @@ export function useAttendanceStore(): AttendanceStore {
   );
   const [assignments, setAssignments] = useState<Record<string, string[]>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [assessmentUrl, setAssessmentUrlState] = useState<string>("");
 
   const clientIdRef = useRef<string>("");
   if (!clientIdRef.current) clientIdRef.current = makeClientId();
@@ -189,6 +198,7 @@ export function useAttendanceStore(): AttendanceStore {
     if (d.materials) setMaterials(d.materials);
     setAssignments(d.assignments ?? {});
     setNotes(d.notes ?? {});
+    setAssessmentUrlState(d.assessmentUrl ?? "");
   }, []);
 
   // Firestore からリアルタイム購読（他PCの変更も自動反映）
@@ -245,6 +255,7 @@ export function useAttendanceStore(): AttendanceStore {
       materials,
       assignments,
       notes,
+      assessmentUrl,
     }),
     [
       typeById,
@@ -254,6 +265,7 @@ export function useAttendanceStore(): AttendanceStore {
       materials,
       assignments,
       notes,
+      assessmentUrl,
     ]
   );
 
@@ -661,6 +673,11 @@ export function useAttendanceStore(): AttendanceStore {
     });
   }, []);
 
+  // ---- カリキュラムアセスメントシートのURL ----
+  const setAssessmentUrl = useCallback((url: string) => {
+    setAssessmentUrlState(url.trim());
+  }, []);
+
   const importedMonths = useMemo(() => {
     const set = new Set<string>();
     Object.keys(presentByDate).forEach((k) => set.add(k.slice(0, 7)));
@@ -698,5 +715,7 @@ export function useAttendanceStore(): AttendanceStore {
     removeAssignment,
     getNote,
     setNote,
+    assessmentUrl,
+    setAssessmentUrl,
   };
 }
