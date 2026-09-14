@@ -51,6 +51,74 @@ function flashIndicator(msg, ok) {
   }, 2800);
 }
 
+// ---- ログイン後の最初の画面（生徒選択画面）で出す確認ポップアップ ----
+// 右下の小さな「📡 記録中」だけでは気づきにくいため、記録が動いていることを
+// 画面の真ん中で大きく知らせる。タブごとに1回だけ出し、OKを押すまで消えない。
+const POPUP_SHOWN_KEY = "smm-start-popup-shown";
+
+// ログイン画面かどうか（パスワード入力欄があるうちはログイン画面とみなす）。
+// ログイン画面ではポップアップを出さず、次の画面に移ってから出す
+function isLoginScreen() {
+  return !!document.querySelector('input[type="password"]');
+}
+
+function showStartPopup() {
+  if (document.getElementById("smm-start-popup")) return;
+
+  const overlay = document.createElement("div");
+  overlay.id = "smm-start-popup";
+  overlay.style.cssText =
+    "position:fixed;inset:0;z-index:2147483647;display:flex;" +
+    "align-items:center;justify-content:center;padding:16px;" +
+    "background:rgba(0,0,0,.45);font:400 16px/1.6 sans-serif;";
+
+  const card = document.createElement("div");
+  card.style.cssText =
+    "background:#fff;border-radius:16px;padding:28px 24px;max-width:420px;width:100%;" +
+    "box-shadow:0 8px 32px rgba(0,0,0,.35);text-align:center;color:#18181b;";
+
+  const title = document.createElement("div");
+  title.textContent = "📡 学習記録ブリッジ ON";
+  title.style.cssText = "font-size:22px;font-weight:700;color:#059669;margin-bottom:12px;";
+
+  const body = document.createElement("div");
+  body.textContent = "学習の開始と結果は、支援教材管理アプリへ自動で記録されます。";
+  body.style.cssText = "font-size:16px;color:#3f3f46;margin-bottom:22px;";
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.textContent = "OK";
+  // タブレットで押しやすいように大きめのボタンにする
+  btn.style.cssText =
+    "width:100%;padding:14px 20px;border:0;border-radius:12px;cursor:pointer;" +
+    "background:#059669;color:#fff;font-size:18px;font-weight:700;";
+  btn.addEventListener("click", () => overlay.remove());
+
+  card.appendChild(title);
+  card.appendChild(body);
+  card.appendChild(btn);
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+  log("開始ポップアップを表示しました");
+}
+
+function maybeShowStartPopup() {
+  if (!document.body) return;
+  try {
+    if (sessionStorage.getItem(POPUP_SHOWN_KEY)) return;
+  } catch {
+    // sessionStorageが使えない環境では毎回の表示を避けるため何もしない
+    return;
+  }
+  if (isLoginScreen()) return;
+  try {
+    sessionStorage.setItem(POPUP_SHOWN_KEY, "1");
+  } catch {
+    return;
+  }
+  showStartPopup();
+}
+
 function getParams() {
   const p = new URLSearchParams(location.search);
   return {
@@ -199,6 +267,8 @@ setInterval(() => {
     log("画面遷移:", location.href);
     // 遷移直後はデータ未描画のことがあるので、少し待って再判定
     setTimeout(handleAll, 300);
+    // ログイン画面から生徒選択画面に移るのもこのタイミング
+    setTimeout(maybeShowStartPopup, 400);
   }
 }, 700);
 window.addEventListener("popstate", () => setTimeout(handleAll, 300));
@@ -214,4 +284,13 @@ mo.observe(document.documentElement, { childList: true, subtree: true });
 // 初回
 ensureIndicator();
 setTimeout(handleAll, 500);
+// ログインでページごと読み込み直される作りでも出るように、初回も確認する。
+// 読み込み途中だとログイン欄がまだ無く、ログイン画面で誤って出てしまうため、
+// 少し待ってから2回続けて「ログイン画面ではない」ことを確かめる
+setTimeout(() => {
+  if (isLoginScreen()) return;
+  setTimeout(() => {
+    if (!isLoginScreen()) maybeShowStartPopup();
+  }, 1200);
+}, 1500);
 log("起動しました。URL:", location.href);

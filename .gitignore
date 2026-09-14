@@ -43,3 +43,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# APIキーを直接書いたユーザースクリプト（配布用。公開しない）
+/userscript/
