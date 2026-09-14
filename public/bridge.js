@@ -17,7 +17,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "1.0.0";
+  const VERSION = "1.1.0";
 
   // 二重に押されても、監視を二重に仕掛けない
   if (window.__smmBridge) {
@@ -49,19 +49,16 @@
     }
   }
 
-  function askKey() {
-    const v = prompt(
-      "支援教材管理アプリのAPIキーを入力してください。\n（初回のみ。次回からは入力不要です）",
-      storedKey()
-    );
-    if (v === null) return storedKey(); // キャンセル
-    const k = v.trim();
+  // キーの入力は prompt() を使わない。
+  // Android のブラウザでは prompt が抑制されることがあり、そこで処理が
+  // 止まると画面に何も出ないまま動かなくなるため、ポップアップ内の
+  // 入力欄で受け取る
+  function saveKey(k) {
     try {
       localStorage.setItem(KEY_STORE, k);
     } catch {
       // 保存できない設定のときは、このタブを閉じるまで有効
     }
-    return k;
   }
 
   let apiKey = storedKey();
@@ -159,22 +156,53 @@
       "background:" + (ready ? "#059669" : "#d97706") + ";color:#fff;font-size:18px;font-weight:700;";
     btn.addEventListener("click", () => overlay.remove());
 
-    const keyBtn = document.createElement("button");
-    keyBtn.type = "button";
-    keyBtn.textContent = ready ? "APIキーを変更する" : "APIキーを入力する";
-    keyBtn.style.cssText =
-      "width:100%;margin-top:10px;padding:10px 20px;border:1px solid #d4d4d8;" +
-      "border-radius:12px;cursor:pointer;background:#fff;color:#52525b;font-size:14px;";
-    keyBtn.addEventListener("click", () => {
-      apiKey = askKey();
+    // APIキーの入力欄（キーが未設定のときは最初から開いておく）
+    const keyBox = document.createElement("div");
+    keyBox.style.cssText = "margin-top:10px;" + (ready ? "display:none;" : "");
+
+    const keyInput = document.createElement("input");
+    keyInput.type = "text";
+    keyInput.value = apiKey;
+    keyInput.placeholder = "APIキーを貼り付け";
+    keyInput.autocapitalize = "off";
+    keyInput.spellcheck = false;
+    keyInput.style.cssText =
+      "width:100%;padding:12px;border:1px solid #d4d4d8;border-radius:10px;" +
+      "font-size:15px;color:#18181b;background:#fff;";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.textContent = "APIキーを保存";
+    saveBtn.style.cssText =
+      "width:100%;margin-top:8px;padding:12px 20px;border:0;border-radius:10px;" +
+      "cursor:pointer;background:#3f3f46;color:#fff;font-size:15px;font-weight:700;";
+    saveBtn.addEventListener("click", () => {
+      apiKey = keyInput.value.trim();
+      saveKey(apiKey);
       overlay.remove();
       ensureIndicator();
       showPopup();
     });
 
+    keyBox.appendChild(keyInput);
+    keyBox.appendChild(saveBtn);
+
+    const keyBtn = document.createElement("button");
+    keyBtn.type = "button";
+    keyBtn.textContent = "APIキーを変更する";
+    keyBtn.style.cssText =
+      "width:100%;margin-top:10px;padding:10px 20px;border:1px solid #d4d4d8;" +
+      "border-radius:12px;cursor:pointer;background:#fff;color:#52525b;font-size:14px;" +
+      (ready ? "" : "display:none;");
+    keyBtn.addEventListener("click", () => {
+      keyBox.style.display = "";
+      keyBtn.style.display = "none";
+    });
+
     card.appendChild(title);
     card.appendChild(body);
     card.appendChild(btn);
+    card.appendChild(keyBox);
     card.appendChild(keyBtn);
     overlay.appendChild(card);
     document.body.appendChild(overlay);
@@ -337,12 +365,29 @@
 
   window.__smmBridge = { version: VERSION, showPopup };
 
+  // 途中でエラーが出ると「押しても何も出ない」ことになり、原因が分からない。
+  // 画面に赤い帯で出して、気づけるようにする
+  function showError(msg) {
+    try {
+      const e = document.createElement("div");
+      e.style.cssText =
+        "position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#dc2626;" +
+        "color:#fff;font:700 13px/1.6 sans-serif;padding:8px;text-align:center;";
+      e.textContent = "学習記録ブリッジのエラー: " + msg;
+      document.body.appendChild(e);
+    } catch {
+      // ここで失敗したら打つ手がない
+    }
+  }
+
   // 押した直後に「動き始めた」ことを知らせる
-  ensureIndicator();
-  if (!apiKey) apiKey = askKey();
-  ensureIndicator();
-  showPopup();
-  setTimeout(handleAll, 500);
+  try {
+    ensureIndicator();
+    showPopup();
+    setTimeout(handleAll, 500);
+  } catch (e) {
+    showError(String((e && e.message) || e));
+  }
 
   log("起動しました v" + VERSION, location.href);
 })();
