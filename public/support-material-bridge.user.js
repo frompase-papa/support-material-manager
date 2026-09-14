@@ -1,19 +1,15 @@
 // ==UserScript==
 // @name         支援教材 学習記録ブリッジ
 // @namespace    support-material-manager
-// @version      1.4.0
+// @version      1.4.1
 // @description  brain-program の学習開始・結果を支援教材管理アプリへ自動送信します（拡張機能版と同じ動き）。
 // @author       支援教材管理アプリ
-// ホスト名に brain-program が入るURLなら、サブドメイン・ポート番号・http/https を問わず動かす。
-// （実際のURLが分からなくても取りこぼさないようにするため）
-// @include      /^https?:\/\/[^\/]*brain-program[^\/]*\//
-// @match        https://brain-program-001.com/*
-// @match        https://www.brain-program-001.com/*
-// @match        https://*.brain-program-001.com/*
-// @include      *://brain-program-001.com/*
-// @include      *://brain-program-001.com:*/*
-// @include      *://www.brain-program-001.com/*
-// @include      *://www.brain-program-001.com:*/*
+// 対象は全サイトにしてあるが、実際に動くのは brain-program のページだけ。
+// ポート番号付き（:3000）や http:// のURLだと @match の書き方で取りこぼすことがあり、
+// 「URLが一致していないのか、動いていないのか」が切り分けられなかったため、
+// 一致の判定をスクリプト側（下の brain-program 判定）に寄せている。
+// それ以外のサイトでは、最初の1行で何もせず終了する。
+// @match        *://*/*
 // @connect      support-material-manager.vercel.app
 // @updateURL    https://support-material-manager.vercel.app/support-material-bridge.user.js
 // @downloadURL  https://support-material-manager.vercel.app/support-material-bridge.user.js
@@ -33,6 +29,11 @@
 
 (function () {
   "use strict";
+
+  // brain-program 以外のサイトでは何もしない（全サイト対象にしているため）
+  if (!/brain-program/i.test(location.hostname)) return;
+
+  const VERSION = "1.4.1";
 
   const CONFIG = {
     // 送信先（支援教材管理アプリ）
@@ -137,12 +138,14 @@
     if (!el) {
       el = document.createElement("div");
       el.id = "smm-rec-indicator";
+      // 画面上部の帯にする。右下だと、サイト側のボタンやナビに隠れて
+      // 「動いていない」のか「見えていないだけ」なのか分からなかったため
       el.style.cssText =
-        "position:fixed;bottom:8px;right:8px;z-index:2147483647;" +
-        "background:rgba(16,185,129,.92);color:#fff;font:600 12px/1.4 sans-serif;" +
-        "padding:4px 10px;border-radius:9999px;box-shadow:0 1px 4px rgba(0,0,0,.3);" +
+        "position:fixed;top:0;left:0;right:0;z-index:2147483647;" +
+        "background:rgba(16,185,129,.95);color:#fff;font:700 14px/2.2 sans-serif;" +
+        "text-align:center;box-shadow:0 1px 6px rgba(0,0,0,.35);" +
         "pointer-events:none;user-select:none;";
-      el.textContent = "📡 記録中";
+      el.textContent = "📡 記録中 v" + VERSION;
       document.body.appendChild(el);
     }
     // キーが未設定のあいだは、記録できないことが分かるようにしておく
@@ -163,8 +166,8 @@
     clearTimeout(el.__t);
     el.__t = setTimeout(() => {
       el.__t = null;
-      el.textContent = "📡 記録中";
-      el.style.background = "rgba(16,185,129,.92)";
+      el.textContent = apiKey ? "📡 記録中 v" + VERSION : "⚠ APIキー未設定";
+      el.style.background = apiKey ? "rgba(16,185,129,.95)" : "rgba(217,119,6,.95)";
     }, 2800);
   }
 
