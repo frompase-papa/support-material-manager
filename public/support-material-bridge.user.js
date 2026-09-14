@@ -33,7 +33,7 @@
   // brain-program 以外のサイトでは何もしない（全サイト対象にしているため）
   if (!/brain-program/i.test(location.hostname)) return;
 
-  const VERSION = "1.4.1";
+  const VERSION = "1.4.2";
 
   const CONFIG = {
     // 送信先（支援教材管理アプリ）
@@ -61,29 +61,28 @@
     }
   }
 
-  function askKey() {
-    const cur = storedKey();
-    const v = prompt(
-      "支援教材管理アプリのAPIキーを入力してください。\n（初回のみ。入力後はこの端末に保存されます）",
-      cur
-    );
-    if (v === null) return cur; // キャンセル
-    const k = v.trim();
+  // キーの入力に prompt() は使わない。
+  // Android のブラウザでは prompt が抑制されることがあり、そこで処理が
+  // 止まると画面に何も出ないまま動かなくなるため、ポップアップ内の入力欄で受け取る
+  function saveKey(k) {
     try {
       GM_setValue(KEY_STORE, k);
     } catch {
       // 保存できない環境では、この画面を開いている間だけ有効
     }
-    return k;
   }
 
   let apiKey = storedKey();
 
-  // あとからキーを入れ直せるように、メニューに項目を足しておく
+  // あとからキーを入れ直したいときのために、メニューからもポップアップを開けるようにする
   try {
     GM_registerMenuCommand("APIキーを入力・変更する", () => {
-      apiKey = askKey();
-      alert(apiKey ? "APIキーを保存しました。" : "APIキーが空です。");
+      try {
+        sessionStorage.removeItem(POPUP_SHOWN_KEY);
+      } catch {
+        // 消せなくてもポップアップは開く
+      }
+      showStartPopup();
     });
   } catch {
     // メニューに登録できない環境では何もしない
@@ -207,7 +206,7 @@
     const body = document.createElement("div");
     body.textContent = ready
       ? "学習の開始と結果は、支援教材管理アプリへ自動で記録されます。"
-      : "このままでは記録されません。Tampermonkeyのメニューから「APIキーを入力・変更する」を選んで入力してください。";
+      : "このままでは記録されません。下の欄にAPIキーを貼り付けて保存してください。";
     body.style.cssText = "font-size:16px;color:#3f3f46;margin-bottom:22px;";
 
     const btn = document.createElement("button");
@@ -219,9 +218,54 @@
       "background:" + (ready ? "#059669" : "#d97706") + ";color:#fff;font-size:18px;font-weight:700;";
     btn.addEventListener("click", () => overlay.remove());
 
+    // APIキーの入力欄（未設定のときは最初から開いておく）
+    const keyBox = document.createElement("div");
+    keyBox.style.cssText = "margin-top:10px;" + (ready ? "display:none;" : "");
+
+    const keyInput = document.createElement("input");
+    keyInput.type = "text";
+    keyInput.value = apiKey;
+    keyInput.placeholder = "APIキーを貼り付け";
+    keyInput.autocapitalize = "off";
+    keyInput.spellcheck = false;
+    keyInput.style.cssText =
+      "width:100%;padding:12px;border:1px solid #d4d4d8;border-radius:10px;" +
+      "font-size:15px;color:#18181b;background:#fff;";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.textContent = "APIキーを保存";
+    saveBtn.style.cssText =
+      "width:100%;margin-top:8px;padding:12px 20px;border:0;border-radius:10px;" +
+      "cursor:pointer;background:#3f3f46;color:#fff;font-size:15px;font-weight:700;";
+    saveBtn.addEventListener("click", () => {
+      apiKey = keyInput.value.trim();
+      saveKey(apiKey);
+      overlay.remove();
+      ensureIndicator();
+      showStartPopup();
+    });
+
+    keyBox.appendChild(keyInput);
+    keyBox.appendChild(saveBtn);
+
+    const keyBtn = document.createElement("button");
+    keyBtn.type = "button";
+    keyBtn.textContent = "APIキーを変更する";
+    keyBtn.style.cssText =
+      "width:100%;margin-top:10px;padding:10px 20px;border:1px solid #d4d4d8;" +
+      "border-radius:12px;cursor:pointer;background:#fff;color:#52525b;font-size:14px;" +
+      (ready ? "" : "display:none;");
+    keyBtn.addEventListener("click", () => {
+      keyBox.style.display = "";
+      keyBtn.style.display = "none";
+    });
+
     card.appendChild(title);
     card.appendChild(body);
     card.appendChild(btn);
+    card.appendChild(keyBox);
+    card.appendChild(keyBtn);
     overlay.appendChild(card);
     document.body.appendChild(overlay);
     log("開始ポップアップを表示しました");
@@ -235,7 +279,9 @@
       // sessionStorageが使えない環境では毎回の表示を避けるため何もしない
       return;
     }
-    if (isLoginScreen()) return;
+    // APIキーが未設定のうちは、ログイン画面でも出す。
+    // そうしないと入力する場所にたどり着けないため
+    if (apiKey && isLoginScreen()) return;
     try {
       sessionStorage.setItem(POPUP_SHOWN_KEY, "1");
     } catch {
