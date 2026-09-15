@@ -37,18 +37,53 @@ function ensureIndicator() {
   return el;
 }
 
+// 未送信の件数。0件なら緑の「記録中」、1件でも残っていれば赤いまま出し続ける。
+// 一瞬だけ赤くして緑に戻す作りだと、送れていないことに気づけないため。
+let pendingCount = 0;
+let flashUntil = 0;
+
+/** 現在の状態をバッジに描く（消えていれば作り直す） */
+function paintIndicator() {
+  const el = ensureIndicator();
+  if (!el) return;
+  if (Date.now() < flashUntil) return; // 一時表示中は上書きしない
+  if (pendingCount > 0) {
+    el.textContent = `⚠ 未送信 ${pendingCount}件`;
+    el.style.background = "rgba(220,38,38,.95)"; // 赤：送れていない
+  } else {
+    el.textContent = "📡 記録中";
+    el.style.background = "rgba(16,185,129,.92)"; // 緑：正常
+  }
+}
+
 function flashIndicator(msg, ok) {
   const el = ensureIndicator();
   if (!el) return;
   el.textContent = msg;
   el.style.background = ok
-    ? "rgba(37,99,235,.95)" // 青：送信
+    ? "rgba(37,99,235,.95)" // 青：送信できた
     : "rgba(220,38,38,.95)"; // 赤：失敗
+  flashUntil = Date.now() + 2800;
   clearTimeout(el.__t);
-  el.__t = setTimeout(() => {
-    el.textContent = "📡 記録中";
-    el.style.background = "rgba(16,185,129,.92)";
-  }, 2800);
+  el.__t = setTimeout(paintIndicator, 2800);
+}
+
+/** 送信結果に含まれる未送信件数をバッジに反映する */
+function applyPending(r) {
+  if (r && typeof r.pending === "number") pendingCount = r.pending;
+}
+
+/** バックグラウンドに未送信件数を聞く。この問い合わせが再送のきっかけも兼ねる。 */
+function pollStatus() {
+  try {
+    chrome.runtime.sendMessage({ type: "study/status" }, (r) => {
+      if (chrome.runtime.lastError) return; // 起動直後などは黙って無視
+      applyPending(r);
+      paintIndicator();
+    });
+  } catch {
+    /* 拡張が再読み込みされた直後などは無視 */
+  }
 }
 
 // ---- ログイン後の最初の画面（生徒選択画面）で出す確認ポップアップ ----
@@ -229,7 +264,11 @@ function handleStart() {
   log("開始を送信", payload);
   chrome.runtime.sendMessage({ type: "study/start", payload }, (r) => {
     log("開始の応答", r);
-    flashIndicator("▶ 開始を送信", r && r.ok);
+    applyPending(r);
+    flashIndicator(
+      r && r.ok ? "▶ 開始を送信" : "⚠ 送信失敗（保存して再送します）",
+      r && r.ok
+    );
   });
 }
 
@@ -248,8 +287,12 @@ function handleFinish() {
   log("結果を送信", data);
   chrome.runtime.sendMessage({ type: "study/finish", payload: data }, (r) => {
     log("結果の応答", r);
+    applyPending(r);
     const label = `${data.title ?? "結果"} ${data.score ?? ""}点`;
-    flashIndicator(r && r.ok ? `✓ 送信: ${label}` : "⚠ 送信失敗", r && r.ok);
+    flashIndicator(
+      r && r.ok ? `✓ 送信: ${label}` : "⚠ 送信失敗（保存して再送します）",
+      r && r.ok
+    );
   });
 }
 
@@ -261,7 +304,7 @@ function handleAll() {
 // URL変化の監視（SPA対応）
 let lastUrl = location.href;
 setInterval(() => {
-  ensureIndicator(); // 消えないように毎回確保
+  paintIndicator(); // 消えないように毎回確保しつつ、未送信の状態を反映
   if (location.href !== lastUrl) {
     lastUrl = location.href;
     log("画面遷移:", location.href);
@@ -282,7 +325,10 @@ const mo = new MutationObserver(() => {
 mo.observe(document.documentElement, { childList: true, subtree: true });
 
 // 初回
-ensureIndicator();
+paintIndicator();
+pollStatus();
+// 未送信件数の確認と再送のきっかけ（Service Worker が寝ていても起こせる）
+setInterval(pollStatus, 5000);
 setTimeout(handleAll, 500);
 // ログインでページごと読み込み直される作りでも出るように、初回も確認する。
 // 読み込み途中だとログイン欄がまだ無く、ログイン画面で誤って出てしまうため、
