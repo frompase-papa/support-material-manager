@@ -27,6 +27,10 @@ import {
   newMaterialId,
   type TeachingMaterial,
 } from "@/app/lib/teachingMaterials";
+import {
+  newSupportProgramId,
+  type SupportProgram,
+} from "@/app/lib/supportPrograms";
 import { toDateKey } from "@/app/lib/date";
 import type { ParsedMonth } from "@/app/lib/hugImport";
 
@@ -80,6 +84,8 @@ function mergePreferNonEmpty(
     assignments: pick(local.assignments, cloud.assignments),
     notes: pick(local.notes, cloud.notes),
     assessmentUrl: pick(local.assessmentUrl, cloud.assessmentUrl),
+    supportPrograms: pick(local.supportPrograms, cloud.supportPrograms),
+    supportAssignments: pick(local.supportAssignments, cloud.supportAssignments),
   };
 }
 
@@ -108,6 +114,10 @@ interface PersistedState {
   notes: Record<string, string>; // studentId -> 支援メモ
   /** カリキュラムアセスメントシート（Googleスプレッドシート等）のURL */
   assessmentUrl: string;
+  /** 専門支援マスタ */
+  supportPrograms: SupportProgram[];
+  /** 専門支援の割り当て recordId -> 専門支援id[] */
+  supportAssignments: Record<string, string[]>;
 }
 
 export interface ImportResult {
@@ -165,6 +175,29 @@ export interface AttendanceStore {
   // カリキュラムアセスメントシート（教室ごとにURLが異なるので登録制）
   assessmentUrl: string;
   setAssessmentUrl: (url: string) => void;
+
+  // 専門支援マスタ（カリキュラム／タブレット どちらの生徒にも割り当てられる）
+  supportPrograms: SupportProgram[];
+  getSupportProgramById: (id: string) => SupportProgram | undefined;
+  addSupportProgram: (input: Omit<SupportProgram, "id">) => void;
+  updateSupportProgram: (
+    id: string,
+    patch: Partial<Omit<SupportProgram, "id">>
+  ) => void;
+  deleteSupportProgram: (id: string) => void;
+
+  // 専門支援の割り当て（その日に実施する専門支援）
+  getAssignedSupportIds: (studentId: string, date: Date) => string[];
+  addSupportAssignment: (
+    studentId: string,
+    date: Date,
+    programId: string
+  ) => void;
+  removeSupportAssignment: (
+    studentId: string,
+    date: Date,
+    programId: string
+  ) => void;
 }
 
 function monthKey(year: number, month: number): string {
@@ -183,6 +216,10 @@ export function useAttendanceStore(): AttendanceStore {
   const [assignments, setAssignments] = useState<Record<string, string[]>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [assessmentUrl, setAssessmentUrlState] = useState<string>("");
+  const [supportPrograms, setSupportPrograms] = useState<SupportProgram[]>([]);
+  const [supportAssignments, setSupportAssignments] = useState<
+    Record<string, string[]>
+  >({});
 
   const clientIdRef = useRef<string>("");
   if (!clientIdRef.current) clientIdRef.current = makeClientId();
@@ -199,6 +236,8 @@ export function useAttendanceStore(): AttendanceStore {
     setAssignments(d.assignments ?? {});
     setNotes(d.notes ?? {});
     setAssessmentUrlState(d.assessmentUrl ?? "");
+    setSupportPrograms(d.supportPrograms ?? []);
+    setSupportAssignments(d.supportAssignments ?? {});
   }, []);
 
   // Firestore からリアルタイム購読（他PCの変更も自動反映）
@@ -256,6 +295,8 @@ export function useAttendanceStore(): AttendanceStore {
       assignments,
       notes,
       assessmentUrl,
+      supportPrograms,
+      supportAssignments,
     }),
     [
       typeById,
@@ -266,6 +307,8 @@ export function useAttendanceStore(): AttendanceStore {
       assignments,
       notes,
       assessmentUrl,
+      supportPrograms,
+      supportAssignments,
     ]
   );
 
@@ -673,6 +716,78 @@ export function useAttendanceStore(): AttendanceStore {
     });
   }, []);
 
+  // ---- 専門支援マスタ ----
+  const supportProgramMap = useMemo(
+    () => new Map(supportPrograms.map((p) => [p.id, p])),
+    [supportPrograms]
+  );
+  const getSupportProgramById = useCallback(
+    (id: string) => supportProgramMap.get(id),
+    [supportProgramMap]
+  );
+  const addSupportProgram = useCallback(
+    (input: Omit<SupportProgram, "id">) => {
+      setSupportPrograms((prev) => [
+        ...prev,
+        { ...input, id: newSupportProgramId() },
+      ]);
+    },
+    []
+  );
+  const updateSupportProgram = useCallback(
+    (id: string, patch: Partial<Omit<SupportProgram, "id">>) => {
+      setSupportPrograms((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, ...patch } : p))
+      );
+    },
+    []
+  );
+  const deleteSupportProgram = useCallback((id: string) => {
+    setSupportPrograms((prev) => prev.filter((p) => p.id !== id));
+    // 割り当てからも取り除く
+    setSupportAssignments((prev) => {
+      const next: Record<string, string[]> = {};
+      for (const [k, ids] of Object.entries(prev)) {
+        const filtered = ids.filter((pid) => pid !== id);
+        if (filtered.length > 0) next[k] = filtered;
+      }
+      return next;
+    });
+  }, []);
+
+  // ---- 専門支援の割り当て ----
+  const getAssignedSupportIds = useCallback(
+    (studentId: string, date: Date): string[] =>
+      supportAssignments[makeRecordId(studentId, toDateKey(date))] ?? [],
+    [supportAssignments]
+  );
+  const addSupportAssignment = useCallback(
+    (studentId: string, date: Date, programId: string) => {
+      const recId = makeRecordId(studentId, toDateKey(date));
+      setSupportAssignments((prev) => {
+        const list = prev[recId] ?? [];
+        if (list.includes(programId)) return prev;
+        return { ...prev, [recId]: [...list, programId] };
+      });
+    },
+    []
+  );
+  const removeSupportAssignment = useCallback(
+    (studentId: string, date: Date, programId: string) => {
+      const recId = makeRecordId(studentId, toDateKey(date));
+      setSupportAssignments((prev) => {
+        const list = prev[recId];
+        if (!list) return prev;
+        const filtered = list.filter((pid) => pid !== programId);
+        const next = { ...prev };
+        if (filtered.length > 0) next[recId] = filtered;
+        else delete next[recId];
+        return next;
+      });
+    },
+    []
+  );
+
   // ---- カリキュラムアセスメントシートのURL ----
   const setAssessmentUrl = useCallback((url: string) => {
     setAssessmentUrlState(url.trim());
@@ -717,5 +832,13 @@ export function useAttendanceStore(): AttendanceStore {
     setNote,
     assessmentUrl,
     setAssessmentUrl,
+    supportPrograms,
+    getSupportProgramById,
+    addSupportProgram,
+    updateSupportProgram,
+    deleteSupportProgram,
+    getAssignedSupportIds,
+    addSupportAssignment,
+    removeSupportAssignment,
   };
 }

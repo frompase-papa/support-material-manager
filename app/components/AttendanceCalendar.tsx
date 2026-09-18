@@ -30,6 +30,8 @@ import { HugImportPanel } from "@/app/components/HugImportPanel";
 import { MaterialAssignment } from "@/app/components/MaterialAssignment";
 import { SupportNote } from "@/app/components/SupportNote";
 import { MaterialMasterPanel } from "@/app/components/MaterialMasterPanel";
+import { SupportProgramMasterPanel } from "@/app/components/SupportProgramMasterPanel";
+import { SupportProgramAssignment } from "@/app/components/SupportProgramAssignment";
 import { WeekPrintSheet } from "@/app/components/WeekPrintSheet";
 import {
   AssessmentSheetPanel,
@@ -88,6 +90,7 @@ export default function AttendanceCalendar() {
   const [importOpen, setImportOpen] = useState(false);
   const [masterOpen, setMasterOpen] = useState(false);
   const [assessmentOpen, setAssessmentOpen] = useState(false);
+  const [supportMasterOpen, setSupportMasterOpen] = useState(false);
   const assessmentReady = isSafeHttpUrl(store.assessmentUrl);
 
   return (
@@ -136,6 +139,13 @@ export default function AttendanceCalendar() {
               className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
             >
               📚 教材マスタ
+            </button>
+            <button
+              type="button"
+              onClick={() => setSupportMasterOpen(true)}
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+            >
+              🧩 専門支援マスタ
             </button>
             {/* カリキュラムアセスメントシート（URLは教室ごとに登録） */}
             {assessmentReady ? (
@@ -229,6 +239,12 @@ export default function AttendanceCalendar() {
       )}
       {masterOpen && (
         <MaterialMasterPanel store={store} onClose={() => setMasterOpen(false)} />
+      )}
+      {supportMasterOpen && (
+        <SupportProgramMasterPanel
+          store={store}
+          onClose={() => setSupportMasterOpen(false)}
+        />
       )}
       {assessmentOpen && (
         <AssessmentSheetPanel
@@ -494,6 +510,14 @@ function AttendanceRow({
           readOnly={compact}
         />
       )}
+
+      {/* 専門支援はカリキュラム／タブレットを問わず全員に表示する */}
+      <SupportProgramAssignment
+        studentId={student.id}
+        date={date}
+        store={store}
+        readOnly={compact}
+      />
     </div>
   );
 }
