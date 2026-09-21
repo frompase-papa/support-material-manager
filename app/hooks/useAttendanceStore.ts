@@ -31,6 +31,10 @@ import {
   newSupportProgramId,
   type SupportProgram,
 } from "@/app/lib/supportPrograms";
+import {
+  mergePreferNonEmpty,
+  type PersistedState,
+} from "@/app/lib/mergeState";
 import { toDateKey } from "@/app/lib/date";
 import type { ParsedMonth } from "@/app/lib/hugImport";
 
@@ -41,52 +45,6 @@ const MIGRATED_FLAG_KEY = "sm_migrated_to_cloud";
 
 function makeClientId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
-}
-
-/** null/空配列/空オブジェクト/空文字 を「空」とみなす */
-function isEmptyVal(v: unknown): boolean {
-  if (v === null || v === undefined) return true;
-  if (Array.isArray(v)) return v.length === 0;
-  if (typeof v === "string") return v.trim() === "";
-  if (typeof v === "object") return Object.keys(v).length === 0;
-  return false;
-}
-
-/**
- * 保存時の安全マージ。各コレクションについて、
- * 「ローカルが空で、クラウドに中身がある」場合はクラウドを残す。
- * → まだ読み込めていない/空の状態で、取込済みデータ（HUG等）を消してしまうのを防ぐ。
- */
-function mergePreferNonEmpty(
-  cloud: Partial<PersistedState>,
-  local: PersistedState
-): PersistedState {
-  const pick = <T>(l: T, c: T | undefined): T =>
-    isEmptyVal(l) && !isEmptyVal(c) ? (c as T) : l;
-
-  // 教材マスタは初期値がダミー（非空）なので通常のガードでは守れない。
-  // ローカルが「未変更の初期ダミー」または空のときは、クラウドの教材を優先し、
-  // まだ読み込めていない端末がカスタム教材を上書きするのを防ぐ。
-  const localMatUntouched =
-    local.materials === DEFAULT_TEACHING_MATERIALS ||
-    isEmptyVal(local.materials);
-  const materials =
-    localMatUntouched && !isEmptyVal(cloud.materials)
-      ? (cloud.materials as TeachingMaterial[])
-      : local.materials;
-
-  return {
-    typeById: pick(local.typeById, cloud.typeById),
-    overrides: pick(local.overrides, cloud.overrides),
-    presentByDate: pick(local.presentByDate, cloud.presentByDate),
-    absentByDate: pick(local.absentByDate, cloud.absentByDate),
-    materials,
-    assignments: pick(local.assignments, cloud.assignments),
-    notes: pick(local.notes, cloud.notes),
-    assessmentUrl: pick(local.assessmentUrl, cloud.assessmentUrl),
-    supportPrograms: pick(local.supportPrograms, cloud.supportPrograms),
-    supportAssignments: pick(local.supportAssignments, cloud.supportAssignments),
-  };
 }
 
 /** 日付ごとの名簿リストを統合（同じ日は名前をユニオン） */
@@ -101,23 +59,6 @@ function mergeDateLists(
     next[date] = [...set];
   }
   return next;
-}
-
-/** localStorage に保存する状態 */
-interface PersistedState {
-  typeById: Record<string, StudentType>;
-  overrides: Record<string, Material>;
-  presentByDate: Record<string, string[]>;
-  absentByDate: Record<string, string[]>;
-  materials: TeachingMaterial[];
-  assignments: Record<string, string[]>; // recordId -> 教材id[]
-  notes: Record<string, string>; // studentId -> 支援メモ
-  /** カリキュラムアセスメントシート（Googleスプレッドシート等）のURL */
-  assessmentUrl: string;
-  /** 専門支援マスタ */
-  supportPrograms: SupportProgram[];
-  /** 専門支援の割り当て recordId -> 専門支援id[] */
-  supportAssignments: Record<string, string[]>;
 }
 
 export interface ImportResult {
@@ -224,6 +165,9 @@ export function useAttendanceStore(): AttendanceStore {
   const clientIdRef = useRef<string>("");
   if (!clientIdRef.current) clientIdRef.current = makeClientId();
   const lastSyncedRef = useRef<string>("");
+  // クラウドの内容を実際に受け取れたか。受け取れていれば「全部消した」も
+  // 利用者の意思として保存してよい（受け取れていないうちは消さない）。
+  const loadedFromCloudRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [localBackupAvailable, setLocalBackupAvailable] = useState(false);
 
@@ -260,7 +204,10 @@ export function useAttendanceStore(): AttendanceStore {
         }
         // サーバー確定応答（キャッシュではない）を受け取ってから保存を許可する。
         // → クラウドの最新を読み込む前に、空データで上書きしてしまう事故を防ぐ。
-        if (!snap.metadata.fromCache) setHydrated(true);
+        if (!snap.metadata.fromCache) {
+          loadedFromCloudRef.current = true;
+          setHydrated(true);
+        }
       },
       () => setHydrated(true)
     );
@@ -335,7 +282,11 @@ export function useAttendanceStore(): AttendanceStore {
             }
           }
         }
-        const merged = mergePreferNonEmpty(cloud, localData);
+        const merged = mergePreferNonEmpty(
+          cloud,
+          localData,
+          loadedFromCloudRef.current
+        );
         const mergedJson = JSON.stringify(merged);
         tx.set(
           ref,
