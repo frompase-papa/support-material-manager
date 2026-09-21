@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "build:bridge": "npx --yes esbuild public/bridge.js --minify --target=es2015 --outfile=public/bridge.min.js"
   },
   "dependencies": {
     "firebase": "^12.17.0",
