@@ -56,7 +56,13 @@ const check = (n, ok, x = "") => out.push(`${ok ? "PASS" : "**FAIL**"}  ${n}${x 
   const d = r.byId.get("smm-diag");
   check("診断の帯が作られる", !!d, d ? d.textContent : "作られなかった");
   if (d) {
-    check("バージョンが表示される", /v1\.4\.8/.test(d.textContent), d.textContent);
+    // 期待するバージョンは検査対象のファイルから読む（直書きしない）
+    const expected = (code.match(/VERSION\s*=\s*"([^"]+)"/) || [])[1];
+    check(
+      "バージョンが表示される",
+      !!expected && d.textContent.indexOf("v" + expected) >= 0,
+      `期待=v${expected} / 実際=${d.textContent}`
+    );
     check("hostが表示される", /example\.com/.test(d.textContent));
     check("記録対象=いいえ と出る", /記録対象=いいえ/.test(d.textContent));
   }
