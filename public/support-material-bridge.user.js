@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         支援教材 学習記録ブリッジ
 // @namespace    support-material-manager
-// @version      1.4.1
+// @version      1.4.3
 // @description  brain-program の学習開始・結果を支援教材管理アプリへ自動送信します（拡張機能版と同じ動き）。
 // @author       支援教材管理アプリ
 // 対象は全サイトにしてあるが、実際に動くのは brain-program のページだけ。
@@ -33,7 +33,9 @@
   // brain-program 以外のサイトでは何もしない（全サイト対象にしているため）
   if (!/brain-program/i.test(location.hostname)) return;
 
-  const VERSION = "1.4.2";
+  // ここと @version は必ず揃える。Tampermonkey は @version を見て自動更新するため、
+  // 揃っていないと「画面には新しい番号が出るのに更新が配られない」状態になる。
+  const VERSION = "1.4.3";
 
   const CONFIG = {
     // 送信先（支援教材管理アプリ）
@@ -448,16 +450,15 @@
   });
   mo.observe(document.documentElement, { childList: true, subtree: true });
 
-  // 初回
-  ensureIndicator();
-  setTimeout(handleAll, 500);
-  // ログインでページごと読み込み直される作りでも出るように、初回も確認する。
-  // 読み込み途中だとログイン欄がまだ無く、ログイン画面で誤って出てしまうため、
-  // 少し待ってから2回続けて「ログイン画面ではない」ことを確かめる
+  // 初回。出すかどうかの判断は maybeShowStartPopup に任せる。
+  // ここで isLoginScreen() を見て打ち切ると、APIキーが未設定のときに
+  // 「キーを入力する場所」へたどり着けなくなる（実際そうなっていた）。
+  // キー設定済みのときだけ、ログイン画面で邪魔しないよう見送る。
   setTimeout(() => {
-    if (isLoginScreen()) return;
+    if (apiKey && isLoginScreen()) return;
     setTimeout(() => {
-      if (!isLoginScreen()) maybeShowStartPopup();
+      if (apiKey && isLoginScreen()) return;
+      maybeShowStartPopup();
     }, 1200);
   }, 1500);
 
