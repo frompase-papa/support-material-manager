@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         支援教材 学習記録ブリッジ
 // @namespace    support-material-manager
-// @version      1.4.7
+// @version      1.4.8
 // @description  brain-program の学習開始・結果を支援教材管理アプリへ自動送信します（拡張機能版と同じ動き）。
 // @author       支援教材管理アプリ
 // @match        *://*/*
@@ -38,12 +38,49 @@
 (function () {
   "use strict";
 
-  // brain-program 以外のサイトでは何もしない（全サイト対象にしているため）
-  if (!/brain-program/i.test(location.hostname)) return;
-
   // ここと @version は必ず揃える。Tampermonkey は @version を見て自動更新するため、
   // 揃っていないと「画面には新しい番号が出るのに更新が配られない」状態になる。
-  const VERSION = "1.4.7";
+  const VERSION = "1.4.8";
+
+  // ---- 動作確認モード ----
+  // URLの末尾に #smmtest を付けて開くと、どのサイトでも青い帯を出す。
+  // 「Tampermonkeyがスクリプトを注入できているか」だけを、全画面表示や
+  // サイト側の作りに邪魔されない普通のページで確かめるためのもの。
+  // 例: https://example.com/#smmtest
+  const DIAG = /smmtest/i.test(location.hash);
+  const IS_TARGET = /brain-program/i.test(location.hostname);
+
+  // brain-program 以外のサイトでは何もしない（全サイト対象にしているため）
+  if (!IS_TARGET && !DIAG) return;
+
+  if (DIAG) showDiagBanner();
+  if (!IS_TARGET) return;
+
+  function showDiagBanner() {
+    const draw = () => {
+      const root = document.fullscreenElement || document.body;
+      if (!root) return setTimeout(draw, 300);
+      let d = document.getElementById("smm-diag");
+      if (!d) {
+        d = document.createElement("div");
+        d.id = "smm-diag";
+        d.style.cssText =
+          "position:fixed;top:0;left:0;right:0;z-index:2147483647;" +
+          "background:#2563eb;color:#fff;font:700 13px/1.6 sans-serif;" +
+          "padding:8px;text-align:center;";
+      }
+      if (d.parentElement !== root) root.appendChild(d);
+      d.textContent =
+        "✅ 動作確認 v" +
+        VERSION +
+        " ／ host=" +
+        location.hostname +
+        " ／ 記録対象=" +
+        (IS_TARGET ? "はい" : "いいえ");
+    };
+    draw();
+    setInterval(draw, 1000);
+  }
 
   const CONFIG = {
     // 送信先（支援教材管理アプリ）
@@ -495,6 +532,9 @@
     moTimer = setTimeout(handleAll, 400);
   });
   mo.observe(document.documentElement, { childList: true, subtree: true });
+
+  // 帯はこの後 700ms ごとにも描き直すが、待たずにすぐ出す
+  ensureIndicator();
 
   // キーが未設定のうちは、1回だけブラウザ標準のダイアログでも知らせる。
   // 全画面表示中はページ内に描いたものが一切見えないため、動いているのに
