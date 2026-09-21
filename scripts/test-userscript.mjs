@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import vm from "node:vm";
-const SRC = "C:/Users/PC/Desktop/claude_code/support-material-manager/public/support-material-bridge.user.js";
+const SRC = process.argv[2] || "public/support-material-bridge.user.js";
 const code = fs.readFileSync(SRC, "utf8");
 
 function makeEl(tag) {
