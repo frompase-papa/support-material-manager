@@ -17,7 +17,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "1.1.0";
+  const VERSION = "1.2.0";
 
   // 二重に押されても、監視を二重に仕掛けない
   if (window.__smmBridge) {
@@ -99,8 +99,20 @@
       document.body.appendChild(el);
     }
     if (!el.__t) {
-      el.textContent = apiKey ? "📡 記録中" : "⚠ APIキー未設定";
+      el.textContent = apiKey
+        ? "📡 記録中 v" + VERSION
+        : "⚠ APIキー未設定 － ここを押して入力";
       el.style.background = apiKey ? "rgba(16,185,129,.95)" : "rgba(217,119,6,.95)";
+    }
+    // キーが未設定のあいだは、帯そのものを入力欄への入口にする。
+    // ポップアップを閉じてしまっても、画面に見えているものを押せば戻れる。
+    el.style.pointerEvents = apiKey ? "none" : "auto";
+    el.style.cursor = apiKey ? "" : "pointer";
+    if (!el.__bound) {
+      el.__bound = true;
+      el.addEventListener("click", () => {
+        if (!apiKey) showPopup();
+      });
     }
     return el;
   }
