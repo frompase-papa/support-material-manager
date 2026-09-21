@@ -17,7 +17,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "1.2.0";
+  const VERSION = "1.3.0";
 
   // 二重に押されても、監視を二重に仕掛けない
   if (window.__smmBridge) {
@@ -85,8 +85,20 @@
   }
 
   // ---- 画面上部の「記録中」の帯 ----
+  // 全画面表示の最中は、全画面になっている要素の中に入れないと画面に出てこない。
+  // brain-program を全画面で使っていると、帯もポップアップも作られているのに
+  // 何も見えない状態になる。
+  function uiRoot() {
+    return (
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.body
+    );
+  }
+
   function ensureIndicator() {
-    if (!document.body) return null;
+    const root = uiRoot();
+    if (!root) return null;
     let el = document.getElementById("smm-rec-indicator");
     if (!el) {
       el = document.createElement("div");
@@ -96,8 +108,9 @@
         "position:fixed;top:0;left:0;right:0;z-index:2147483647;" +
         "color:#fff;font:700 14px/2.2 sans-serif;text-align:center;" +
         "box-shadow:0 1px 6px rgba(0,0,0,.35);pointer-events:none;user-select:none;";
-      document.body.appendChild(el);
     }
+    // 全画面の出入りで置き場所が変わるので、毎回いまの置き場所へ付け替える
+    if (el.parentElement !== root) root.appendChild(el);
     if (!el.__t) {
       el.textContent = apiKey
         ? "📡 記録中 v" + VERSION
@@ -217,7 +230,7 @@
     card.appendChild(keyBox);
     card.appendChild(keyBtn);
     overlay.appendChild(card);
-    document.body.appendChild(overlay);
+    (uiRoot() || document.body).appendChild(overlay);
   }
 
   // ---- ページからの読み取り ----

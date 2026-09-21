@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         支援教材 学習記録ブリッジ
 // @namespace    support-material-manager
-// @version      1.4.6
+// @version      1.4.7
 // @description  brain-program の学習開始・結果を支援教材管理アプリへ自動送信します（拡張機能版と同じ動き）。
 // @author       支援教材管理アプリ
 // @match        *://*/*
@@ -43,7 +43,7 @@
 
   // ここと @version は必ず揃える。Tampermonkey は @version を見て自動更新するため、
   // 揃っていないと「画面には新しい番号が出るのに更新が配られない」状態になる。
-  const VERSION = "1.4.6";
+  const VERSION = "1.4.7";
 
   const CONFIG = {
     // 送信先（支援教材管理アプリ）
@@ -141,8 +141,20 @@
   }
 
   // ---- 画面すみの「記録中」表示（動いているか一目で分かるように） ----
+  // 全画面表示の最中は、全画面になっている要素の中に入れないと画面に出てこない。
+  // brain-program を全画面で使っていると、帯もポップアップも作られているのに
+  // 何も見えない状態になる（実際にそれで動いていないように見えていた）。
+  function uiRoot() {
+    return (
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.body
+    );
+  }
+
   function ensureIndicator() {
-    if (!document.body) return null;
+    const root = uiRoot();
+    if (!root) return null;
     let el = document.getElementById("smm-rec-indicator");
     if (!el) {
       el = document.createElement("div");
@@ -155,8 +167,9 @@
         "text-align:center;box-shadow:0 1px 6px rgba(0,0,0,.35);" +
         "pointer-events:none;user-select:none;";
       el.textContent = "📡 記録中 v" + VERSION;
-      document.body.appendChild(el);
     }
+    // 全画面の出入りで置き場所が変わるので、毎回いまの置き場所へ付け替える
+    if (el.parentElement !== root) root.appendChild(el);
     // キーが未設定のあいだは、記録できないことを示すだけでなく、
     // 帯そのものを入力欄への入口にする。
     // ポップアップやTampermonkeyのメニューに頼ると、出ない・見つからないときに
@@ -288,7 +301,7 @@
     card.appendChild(keyBox);
     card.appendChild(keyBtn);
     overlay.appendChild(card);
-    document.body.appendChild(overlay);
+    (uiRoot() || document.body).appendChild(overlay);
     log("開始ポップアップを表示しました");
   }
 
@@ -465,6 +478,16 @@
   }, 700);
   window.addEventListener("popstate", () => setTimeout(handleAll, 300));
 
+  // 全画面の出入りに追従して、帯とポップアップを今の置き場所へ移す
+  ["fullscreenchange", "webkitfullscreenchange"].forEach((ev) =>
+    document.addEventListener(ev, () => {
+      ensureIndicator();
+      const popup = document.getElementById("smm-start-popup");
+      const root = uiRoot();
+      if (popup && root && popup.parentElement !== root) root.appendChild(popup);
+    })
+  );
+
   // DOM変化の監視（結果データは非同期に描画されるため）
   let moTimer = null;
   const mo = new MutationObserver(() => {
@@ -472,6 +495,28 @@
     moTimer = setTimeout(handleAll, 400);
   });
   mo.observe(document.documentElement, { childList: true, subtree: true });
+
+  // キーが未設定のうちは、1回だけブラウザ標準のダイアログでも知らせる。
+  // 全画面表示中はページ内に描いたものが一切見えないため、動いているのに
+  // 「何も出ない＝動いていない」と誤解される。ダイアログは全画面でも出る。
+  // キーを入れてしまえば二度と出ない。
+  let noticeShown = false;
+  function notifyUnconfigured() {
+    if (noticeShown || apiKey) return;
+    noticeShown = true;
+    try {
+      alert(
+        "学習記録ブリッジ v" +
+          VERSION +
+          " は動いています。\n\n" +
+          "画面上部の帯を押して、APIキーを入力してください。\n" +
+          "帯が見当たらないときは、全画面表示を一度解除してください。"
+      );
+    } catch {
+      // ダイアログが抑制される環境では何もしない
+    }
+  }
+  setTimeout(notifyUnconfigured, 2500);
 
   // 初回。出すかどうかの判断は maybeShowStartPopup に任せる。
   // ここで isLoginScreen() を見て打ち切ると、APIキーが未設定のときに
