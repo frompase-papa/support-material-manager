@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         支援教材 学習記録ブリッジ
 // @namespace    support-material-manager
-// @version      1.4.3
+// @version      1.4.4
 // @description  brain-program の学習開始・結果を支援教材管理アプリへ自動送信します（拡張機能版と同じ動き）。
 // @author       支援教材管理アプリ
 // 対象は全サイトにしてあるが、実際に動くのは brain-program のページだけ。
@@ -35,7 +35,7 @@
 
   // ここと @version は必ず揃える。Tampermonkey は @version を見て自動更新するため、
   // 揃っていないと「画面には新しい番号が出るのに更新が配られない」状態になる。
-  const VERSION = "1.4.3";
+  const VERSION = "1.4.4";
 
   const CONFIG = {
     // 送信先（支援教材管理アプリ）
@@ -149,10 +149,21 @@
       el.textContent = "📡 記録中 v" + VERSION;
       document.body.appendChild(el);
     }
-    // キーが未設定のあいだは、記録できないことが分かるようにしておく
+    // キーが未設定のあいだは、記録できないことを示すだけでなく、
+    // 帯そのものを入力欄への入口にする。
+    // ポップアップやTampermonkeyのメニューに頼ると、出ない・見つからないときに
+    // 入力する手段が無くなって詰んでしまうため（実際に起きた）。
     if (!apiKey && !el.__t) {
-      el.textContent = "⚠ APIキー未設定";
+      el.textContent = "⚠ APIキー未設定 － ここを押して入力";
       el.style.background = "rgba(217,119,6,.95)";
+    }
+    el.style.pointerEvents = apiKey ? "none" : "auto";
+    el.style.cursor = apiKey ? "" : "pointer";
+    if (!el.__bound) {
+      el.__bound = true;
+      el.addEventListener("click", () => {
+        if (!apiKey) showStartPopup();
+      });
     }
     return el;
   }
@@ -275,20 +286,24 @@
 
   function maybeShowStartPopup() {
     if (!document.body) return;
+
+    // APIキーが未設定のうちは、条件を一切かけずに必ず出す。
+    // 「一度出した」印（sessionStorage）で止めると、印だけ付いて本体が出なかった
+    // 場合に、タブを更新しても二度と出てこなくなる（印はリロードで消えない）。
+    if (!apiKey) {
+      showStartPopup();
+      return;
+    }
+
+    // ここから下は「動いています」のお知らせなので、1タブにつき1回でよい
     try {
       if (sessionStorage.getItem(POPUP_SHOWN_KEY)) return;
-    } catch {
-      // sessionStorageが使えない環境では毎回の表示を避けるため何もしない
-      return;
-    }
-    // APIキーが未設定のうちは、ログイン画面でも出す。
-    // そうしないと入力する場所にたどり着けないため
-    if (apiKey && isLoginScreen()) return;
-    try {
       sessionStorage.setItem(POPUP_SHOWN_KEY, "1");
     } catch {
+      // sessionStorageが使えない環境では毎回の表示を避けるため出さない
       return;
     }
+    if (isLoginScreen()) return;
     showStartPopup();
   }
 
