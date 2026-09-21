@@ -1,15 +1,9 @@
 // ==UserScript==
 // @name         支援教材 学習記録ブリッジ
 // @namespace    support-material-manager
-// @version      1.4.5
+// @version      1.4.6
 // @description  brain-program の学習開始・結果を支援教材管理アプリへ自動送信します（拡張機能版と同じ動き）。
 // @author       支援教材管理アプリ
-// 対象は全サイトにしてあるが、実際に動くのは brain-program のページだけ。
-// それ以外のサイトでは、最初の1行で何もせず終了する。
-//
-// @match は Chrome 由来の書式で、ポート番号付きのURL（例 https://host:3000/）を
-// 取りこぼすことがある。実際 brain-program は :3000 で動いており、@match だけでは
-// 注入されなかった。@include はポートを含めて素直に一致するため、両方書いている。
 // @match        *://*/*
 // @include      *
 // @connect      support-material-manager.vercel.app
@@ -22,6 +16,18 @@
 // @run-at       document-idle
 // ==/UserScript==
 
+// ★ 上のメタデータブロック（==UserScript== 〜 ==/UserScript==）の中には、
+//    「// @項目 値」の行だけを書くこと。説明文を混ぜてはいけない。
+//    特に「// @match は〜」のように書くと、Tampermonkey が壊れた @match として
+//    読み込み、対象ページの判定が働かなくなる（実際にそれで動かなくなった）。
+//    説明は必ずこの位置（ブロックの外）に書く。
+//
+// 対象は全サイトにしてあるが、実際に動くのは brain-program のページだけで、
+// それ以外のサイトでは最初の1行で何もせず終了する。
+// @match は Chrome 由来の書式で、ホスト名の部分にポート番号を持てない。
+// brain-program は :3000 で動いているため @match だけでは取りこぼす。
+// @include はポートを含めて素直に一致するので、両方を並べている。
+//
 // 拡張機能版（extension/）を1ファイルにまとめたもの。
 // Chrome拡張が入れられない端末（Misesなど）で、Tampermonkeyから同じことをする。
 //
@@ -37,7 +43,7 @@
 
   // ここと @version は必ず揃える。Tampermonkey は @version を見て自動更新するため、
   // 揃っていないと「画面には新しい番号が出るのに更新が配られない」状態になる。
-  const VERSION = "1.4.5";
+  const VERSION = "1.4.6";
 
   const CONFIG = {
     // 送信先（支援教材管理アプリ）
