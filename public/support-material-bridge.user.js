@@ -1,15 +1,17 @@
 // ==UserScript==
 // @name         支援教材 学習記録ブリッジ
 // @namespace    support-material-manager
-// @version      1.4.4
+// @version      1.4.5
 // @description  brain-program の学習開始・結果を支援教材管理アプリへ自動送信します（拡張機能版と同じ動き）。
 // @author       支援教材管理アプリ
 // 対象は全サイトにしてあるが、実際に動くのは brain-program のページだけ。
-// ポート番号付き（:3000）や http:// のURLだと @match の書き方で取りこぼすことがあり、
-// 「URLが一致していないのか、動いていないのか」が切り分けられなかったため、
-// 一致の判定をスクリプト側（下の brain-program 判定）に寄せている。
 // それ以外のサイトでは、最初の1行で何もせず終了する。
+//
+// @match は Chrome 由来の書式で、ポート番号付きのURL（例 https://host:3000/）を
+// 取りこぼすことがある。実際 brain-program は :3000 で動いており、@match だけでは
+// 注入されなかった。@include はポートを含めて素直に一致するため、両方書いている。
 // @match        *://*/*
+// @include      *
 // @connect      support-material-manager.vercel.app
 // @updateURL    https://support-material-manager.vercel.app/support-material-bridge.user.js
 // @downloadURL  https://support-material-manager.vercel.app/support-material-bridge.user.js
@@ -35,7 +37,7 @@
 
   // ここと @version は必ず揃える。Tampermonkey は @version を見て自動更新するため、
   // 揃っていないと「画面には新しい番号が出るのに更新が配られない」状態になる。
-  const VERSION = "1.4.4";
+  const VERSION = "1.4.5";
 
   const CONFIG = {
     // 送信先（支援教材管理アプリ）
