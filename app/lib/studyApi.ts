@@ -32,6 +32,32 @@ export function numOrNull(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * 同じ内容の記録を1件にまとめるためのドキュメントID。
+ *
+ * 拡張機能・ユーザースクリプト・ブックマークレットは、どれも同じ画面を見て
+ * 同じ内容を送る。タブレットに複数入っていると同じ結果が2件3件と記録される
+ * （実際に「同じ内容が3回連続」で起きた）。送信の失敗を再送したときも同様。
+ *
+ * 内容と「10分の時間帯」から決まるIDを使い、同じものは上書きにする。
+ * 時間帯を混ぜてあるので、同じ教材を時間をおいてもう一度やった場合は
+ * 別の記録として残る。
+ */
+export function dedupeDocId(
+  type: "start" | "finish",
+  parts: (string | number | null)[]
+): string {
+  const bucket = Math.floor(Date.now() / (10 * 60 * 1000));
+  const key = [type, ...parts.map((p) => (p === null ? "" : String(p))), bucket]
+    .join("|");
+  // Firestore のIDに使える文字だけにする
+  return (
+    type +
+    "_" +
+    Buffer.from(key, "utf8").toString("base64url").slice(0, 120)
+  );
+}
+
 export function strOrNull(v: unknown): string | null {
   if (v === null || v === undefined) return null;
   const s = String(v).trim();

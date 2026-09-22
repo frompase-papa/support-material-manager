@@ -7,16 +7,23 @@ function makeEl(tag) {
   return {
     tagName: tag, id: "", textContent: "", style: { cssText: "" },
     children: [], parentElement: null,
+    attrs: {},
+    getAttribute(k) { return Object.prototype.hasOwnProperty.call(this.attrs, k) ? this.attrs[k] : null; },
+    setAttribute(k, v) { this.attrs[k] = String(v); },
+    removeAttribute(k) { delete this.attrs[k]; },
     appendChild(c) { c.parentElement = this; this.children.push(c); return c; },
     addEventListener() {}, remove() {},
   };
 }
-function run({ hostname, hash }) {
+function run({ hostname, hash, owner }) {
   const byId = new Map();
   const body = makeEl("body");
   const timers = [];
+  const html = makeEl("html");
+  // 他のブリッジが先に動いている状況を再現する
+  if (owner) html.setAttribute("data-smm-bridge-owner", owner);
   const doc = {
-    body, documentElement: makeEl("html"), fullscreenElement: null,
+    body, documentElement: html, fullscreenElement: null,
     createElement: makeEl,
     getElementById: (id) => byId.get(id) || null,
     querySelector: () => null, querySelectorAll: () => [],
@@ -43,7 +50,7 @@ function run({ hostname, hash }) {
   vm.createContext(sandbox);
   let error = null;
   try { vm.runInContext(code, sandbox); for (const f of timers.slice(0, 50)) { try { f(); } catch {} } } catch (e) { error = e; }
-  return { error, byId, body };
+  return { error, byId, body, html };
 }
 
 const out = [];
@@ -85,6 +92,25 @@ const check = (n, ok, x = "") => out.push(`${ok ? "PASS" : "**FAIL**"}  ${n}${x 
   const r = run({ hostname: "www.brain-program-001.com", hash: "#smmtest" });
   const d = r.byId.get("smm-diag");
   check("brain-programでは 記録対象=はい と出る", !!d && /記録対象=はい/.test(d.textContent), d ? d.textContent : "帯なし");
+}
+
+// 5) 二重起動の防止：他のブリッジが先に動いていたら何もしない
+{
+  const r = run({ hostname: "www.brain-program-001.com", hash: "", owner: "拡張機能" });
+  check(
+    "他のブリッジが動いていたら帯を出さない（記録の重複を防ぐ）",
+    !r.error && !r.byId.get("smm-rec-indicator"),
+    r.error ? String(r.error.message) : `要素数=${r.byId.size}`
+  );
+}
+// 6) 先に動いた側は、次に来た側のために印を残す
+{
+  const r = run({ hostname: "www.brain-program-001.com", hash: "" });
+  check(
+    "先に動いた側は印を残す",
+    r.html.getAttribute("data-smm-bridge-owner") !== null,
+    String(r.html.getAttribute("data-smm-bridge-owner"))
+  );
 }
 
 console.log(out.join("\n"));

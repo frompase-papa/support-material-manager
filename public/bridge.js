@@ -17,13 +17,32 @@
 (function () {
   "use strict";
 
-  const VERSION = "1.3.0";
+  const VERSION = "1.4.0";
 
   // 二重に押されても、監視を二重に仕掛けない
   if (window.__smmBridge) {
     window.__smmBridge.showPopup();
     return;
   }
+
+  // 拡張機能やユーザースクリプトが既に動いていたら、こちらは動かない。
+  // 両方が同じ結果を送ると記録が重複するため（実際に同じ内容が3件並んだ）。
+  // 実行環境が分かれていて window を共有しないので、DOM に置いた印で判断する。
+  var SMM_OWNER_ATTR = "data-smm-bridge-owner";
+  var smmOwner = document.documentElement.getAttribute(SMM_OWNER_ATTR);
+  if (smmOwner) {
+    var note = document.createElement("div");
+    note.style.cssText =
+      "position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#2563eb;" +
+      "color:#fff;font:700 13px/1.6 sans-serif;padding:8px;text-align:center;";
+    note.textContent = "既に " + smmOwner + " が記録しています（押す必要はありません）";
+    (document.fullscreenElement || document.body).appendChild(note);
+    setTimeout(function () {
+      note.remove();
+    }, 4000);
+    return;
+  }
+  document.documentElement.setAttribute(SMM_OWNER_ATTR, "ブックマークレット");
 
   const CONFIG = {
     apiBase: "https://support-material-manager.vercel.app",

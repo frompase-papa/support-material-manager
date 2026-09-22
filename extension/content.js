@@ -6,6 +6,24 @@
 //
 // ★ 実データに合わせて調整する箇所は下の CONFIG にまとめてあります。
 
+// ---- 二重起動の防止 ----
+// 拡張機能・ユーザースクリプト・ブックマークレットが同じ端末に入っていると、
+// それぞれが同じ結果を送り、記録が重複する（実際に同じ内容が3件並んだ）。
+// 拡張機能とユーザースクリプトは実行環境が分かれていて window を共有しないため、
+// 共有できる DOM（html要素の属性）に印を置き、先に動いた1つだけが監視する。
+const SMM_OWNER_ATTR = "data-smm-bridge-owner";
+const SMM_ACTIVE = (() => {
+  const owner = document.documentElement.getAttribute(SMM_OWNER_ATTR);
+  if (owner) {
+    console.log(
+      "[学習記録ブリッジ] 既に " + owner + " が動いているため、こちらは停止します"
+    );
+    return false;
+  }
+  document.documentElement.setAttribute(SMM_OWNER_ATTR, "拡張機能");
+  return true;
+})();
+
 const CONFIG = {
   // 結果画面と判定するURLパターン（どれかに一致すれば結果画面）
   resultUrlPattern: /V030002M|V030004E|V030000/i,
@@ -21,6 +39,7 @@ function log(...a) {
 
 // 画面すみの「記録中」表示（拡張が動いているか一目で分かるように）
 function ensureIndicator() {
+  if (!SMM_ACTIVE) return null; // 他のブリッジが動いているときは帯も出さない
   if (!document.body) return null;
   let el = document.getElementById("smm-rec-indicator");
   if (!el) {
@@ -297,6 +316,7 @@ function handleFinish() {
 }
 
 function handleAll() {
+  if (!SMM_ACTIVE) return; // 他のブリッジが動いているときは何もしない
   handleStart();
   handleFinish();
 }
@@ -324,19 +344,21 @@ const mo = new MutationObserver(() => {
 });
 mo.observe(document.documentElement, { childList: true, subtree: true });
 
-// 初回
-paintIndicator();
-pollStatus();
-// 未送信件数の確認と再送のきっかけ（Service Worker が寝ていても起こせる）
-setInterval(pollStatus, 5000);
-setTimeout(handleAll, 500);
-// ログインでページごと読み込み直される作りでも出るように、初回も確認する。
-// 読み込み途中だとログイン欄がまだ無く、ログイン画面で誤って出てしまうため、
-// 少し待ってから2回続けて「ログイン画面ではない」ことを確かめる
-setTimeout(() => {
-  if (isLoginScreen()) return;
+// 初回。他のブリッジが先に動いていたら、画面にも通信にも一切触らない。
+if (SMM_ACTIVE) {
+  paintIndicator();
+  pollStatus();
+  // 未送信件数の確認と再送のきっかけ（Service Worker が寝ていても起こせる）
+  setInterval(pollStatus, 5000);
+  setTimeout(handleAll, 500);
+  // ログインでページごと読み込み直される作りでも出るように、初回も確認する。
+  // 読み込み途中だとログイン欄がまだ無く、ログイン画面で誤って出てしまうため、
+  // 少し待ってから2回続けて「ログイン画面ではない」ことを確かめる
   setTimeout(() => {
-    if (!isLoginScreen()) maybeShowStartPopup();
-  }, 1200);
-}, 1500);
-log("起動しました。URL:", location.href);
+    if (isLoginScreen()) return;
+    setTimeout(() => {
+      if (!isLoginScreen()) maybeShowStartPopup();
+    }, 1200);
+  }, 1500);
+  log("起動しました。URL:", location.href);
+}

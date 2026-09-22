@@ -5,6 +5,7 @@ import { getAdminDb } from "@/app/lib/firebaseAdmin";
 import {
   CORS_HEADERS,
   checkApiKey,
+  dedupeDocId,
   numOrNull,
   strOrNull,
 } from "@/app/lib/studyApi";
@@ -49,19 +50,29 @@ export async function POST(req: Request) {
     );
   }
 
-  await db.collection("studyEvents").add({
-    type: "finish",
-    studentId,
-    studentName: strOrNull(body.studentName),
-    title: strOrNull(body.title),
-    score: numOrNull(body.score),
-    average: numOrNull(body.average),
-    max: numOrNull(body.max),
-    cumulative: numOrNull(body.cumulative),
-    studyDate: strOrNull(body.date), // 実施日（サイト表記そのまま）
-    roomId: strOrNull(body.roomId),
-    receivedAt: FieldValue.serverTimestamp(),
-  });
+  const title = strOrNull(body.title);
+  const score = numOrNull(body.score);
+  const studyDate = strOrNull(body.date);
+
+  // 同じ内容が複数のブリッジから届いても1件にまとめる（IDを内容から決める）
+  const id = dedupeDocId("finish", [studentId, title, score, studyDate]);
+
+  await db.collection("studyEvents").doc(id).set(
+    {
+      type: "finish",
+      studentId,
+      studentName: strOrNull(body.studentName),
+      title,
+      score,
+      average: numOrNull(body.average),
+      max: numOrNull(body.max),
+      cumulative: numOrNull(body.cumulative),
+      studyDate, // 実施日（サイト表記そのまま）
+      roomId: strOrNull(body.roomId),
+      receivedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
 
   return Response.json({ ok: true }, { headers: CORS_HEADERS });
 }

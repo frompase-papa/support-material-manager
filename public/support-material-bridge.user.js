@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         支援教材 学習記録ブリッジ
 // @namespace    support-material-manager
-// @version      1.5.0
+// @version      1.6.0
 // @description  brain-program の学習開始・結果を支援教材管理アプリへ自動送信します（拡張機能版と同じ動き）。
 // @author       支援教材管理アプリ
 // @match        *://*/*
@@ -40,7 +40,7 @@
 
   // ここと @version は必ず揃える。Tampermonkey は @version を見て自動更新するため、
   // 揃っていないと「画面には新しい番号が出るのに更新が配られない」状態になる。
-  const VERSION = "1.5.0";
+  const VERSION = "1.6.0";
 
   // ---- 動作確認モード ----
   // URLの末尾に #smmtest を付けて開くと、どのサイトでも青い帯を出す。
@@ -55,6 +55,23 @@
 
   if (DIAG) showDiagBanner();
   if (!IS_TARGET) return;
+
+  // ---- 二重起動の防止 ----
+  // 拡張機能・ユーザースクリプト・ブックマークレットが同じ端末に入っていると、
+  // それぞれが同じ結果を送り、記録が重複する（実際に同じ内容が3件並んだ）。
+  // 実行環境が分かれていて window を共有しないため、共有できる DOM
+  // （html要素の属性）に印を置き、先に動いた1つだけが記録する。
+  // ★ 属性名は拡張機能・ブックマークレットと必ず同じにすること。
+  //   違う名前にすると互いを認識できず、重複を防げない（一度それで外した）。
+  var SMM_OWNER_ATTR = "data-smm-bridge-owner";
+  var smmOwner = document.documentElement.getAttribute(SMM_OWNER_ATTR);
+  if (smmOwner) {
+    console.log(
+      "[学習記録ブリッジ] 既に " + smmOwner + " が動いているため、こちらは停止します"
+    );
+    return;
+  }
+  document.documentElement.setAttribute(SMM_OWNER_ATTR, "ユーザースクリプト");
 
   function showDiagBanner() {
     const draw = () => {

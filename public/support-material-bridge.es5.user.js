@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         支援教材 学習記録ブリッジ（旧ブラウザ対応版）
 // @namespace    support-material-manager
-// @version      1.5.0
+// @version      1.6.0
 // @description  brain-program の学習開始・結果を支援教材管理アプリへ自動送信します（拡張機能版と同じ動き）。
 // @author       支援教材管理アプリ
 // @match        *://*/*
@@ -19,12 +19,21 @@
 "use strict";
 (function() {
   "use strict";
-  const VERSION = "1.5.0";
+  const VERSION = "1.6.0";
   const DIAG = /smmtest/i.test(location.hash);
   const IS_TARGET = /brain-program/i.test(location.hostname);
   if (!IS_TARGET && !DIAG) return;
   if (DIAG) showDiagBanner();
   if (!IS_TARGET) return;
+  var SMM_OWNER_ATTR = "data-smm-bridge-owner";
+  var smmOwner = document.documentElement.getAttribute(SMM_OWNER_ATTR);
+  if (smmOwner) {
+    console.log(
+      "[\u5B66\u7FD2\u8A18\u9332\u30D6\u30EA\u30C3\u30B8] \u65E2\u306B " + smmOwner + " \u304C\u52D5\u3044\u3066\u3044\u308B\u305F\u3081\u3001\u3053\u3061\u3089\u306F\u505C\u6B62\u3057\u307E\u3059"
+    );
+    return;
+  }
+  document.documentElement.setAttribute(SMM_OWNER_ATTR, "\u30E6\u30FC\u30B6\u30FC\u30B9\u30AF\u30EA\u30D7\u30C8");
   function showDiagBanner() {
     const draw = () => {
       const root = document.fullscreenElement || document.body;

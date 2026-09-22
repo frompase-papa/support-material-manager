@@ -102,11 +102,27 @@ export function StudyDashboard() {
     return () => unsub();
   }, []);
 
-  // 結果（finish）で、実在の生徒のものだけ
-  const realFinishes = useMemo(
-    () => events.filter((e) => e.type === "finish" && isRealStudent(e)),
-    [events]
-  );
+  // 結果（finish）で、実在の生徒のものだけ。
+  //
+  // 同じ内容が複数並ぶことがある。タブレットに拡張機能・ユーザースクリプト・
+  // ブックマークレットが同時に入っていると、それぞれが同じ結果を送るため。
+  // 受信API側でも1件にまとめるようにしたが、それ以前に届いたぶんが残るので
+  // 表示側でも「同じ生徒・同じ教材・同じ点数」が近い時刻に並んだら1件にする。
+  const realFinishes = useMemo(() => {
+    const list = events.filter((e) => e.type === "finish" && isRealStudent(e));
+    const seen = new Map<string, number>();
+    return list.filter((e) => {
+      const at = e.receivedAt ? e.receivedAt.getTime() : 0;
+      const key = [nameOf(e), e.title ?? "", e.score ?? "", e.studyDate ?? ""].join(
+        "|"
+      );
+      const prev = seen.get(key);
+      // 10分以内に同じ内容が来ていたら重複とみなす
+      if (prev !== undefined && Math.abs(at - prev) < 10 * 60 * 1000) return false;
+      seen.set(key, at);
+      return true;
+    });
+  }, [events]);
 
   // 生徒名で束ねる（各生徒＝やった順＝古い→新しい、生徒の並びは最近やった順）
   const groups = useMemo(() => {

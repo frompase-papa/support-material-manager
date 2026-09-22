@@ -2,7 +2,12 @@
 
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/app/lib/firebaseAdmin";
-import { CORS_HEADERS, checkApiKey, strOrNull } from "@/app/lib/studyApi";
+import {
+  CORS_HEADERS,
+  checkApiKey,
+  dedupeDocId,
+  strOrNull,
+} from "@/app/lib/studyApi";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,15 +49,23 @@ export async function POST(req: Request) {
     );
   }
 
-  await db.collection("studyEvents").add({
-    type: "start",
-    studentId,
-    studentName: strOrNull(body.studentName),
-    title: strOrNull(body.title),
-    roomId: strOrNull(body.roomId),
-    startTime: strOrNull(body.startTime),
-    receivedAt: FieldValue.serverTimestamp(),
-  });
+  const title = strOrNull(body.title);
+
+  // 同じ内容が複数のブリッジから届いても1件にまとめる（IDを内容から決める）
+  const id = dedupeDocId("start", [studentId, title]);
+
+  await db.collection("studyEvents").doc(id).set(
+    {
+      type: "start",
+      studentId,
+      studentName: strOrNull(body.studentName),
+      title,
+      roomId: strOrNull(body.roomId),
+      startTime: strOrNull(body.startTime),
+      receivedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
 
   return Response.json({ ok: true }, { headers: CORS_HEADERS });
 }
