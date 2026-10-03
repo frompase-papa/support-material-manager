@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         支援教材 学習記録ブリッジ
 // @namespace    support-material-manager
-// @version      1.6.0
+// @version      1.7.0
 // @description  brain-program の学習開始・結果を支援教材管理アプリへ自動送信します（拡張機能版と同じ動き）。
 // @author       支援教材管理アプリ
 // @match        *://*/*
@@ -40,7 +40,7 @@
 
   // ここと @version は必ず揃える。Tampermonkey は @version を見て自動更新するため、
   // 揃っていないと「画面には新しい番号が出るのに更新が配られない」状態になる。
-  const VERSION = "1.6.0";
+  const VERSION = "1.7.0";
 
   // ---- 動作確認モード ----
   // URLの末尾に #smmtest を付けて開くと、どのサイトでも青い帯を出す。
@@ -155,10 +155,10 @@
   // ---- 送信 ----
   // GM_xmlhttpRequest があればそちらを使う（サイト側のCSPに邪魔されないため）。
   // 無ければ通常の fetch で送る（APIはCORSを許可している）
-  function post(path, data) {
+  function postOnce(path, data) {
     if (!apiKey) {
       log("APIキーが未設定のため送信しません");
-      return Promise.resolve({ ok: false });
+      return Promise.resolve({ ok: false, noKey: true });
     }
     const url = CONFIG.apiBase + path;
     const body = JSON.stringify(data);
@@ -194,6 +194,127 @@
       });
   }
 
+  // ---- 未送信データの保存と自動再送 ----
+  // 送信に失敗したぶんは Tampermonkey の保存領域に貯めておき、あとから送り直す。
+  // ここはページを読み込み直しても、ブラウザを閉じても残るので、
+  // 通信が切れていた時間帯の記録も、次につながったときにまとめて送られる。
+  // 2026-09-15 に、鍵の不一致で丸一日ぶんの記録が失われた事故があったため入れている。
+  const QUEUE_STORE = "smm-pending";
+  const MAX_QUEUE = 300; // これを超えたら古いものから捨てる
+  const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // これより古いものは諦める
+  const RETRY_INTERVAL_MS = 20000; // 再送を試みる間隔
+  const MAX_CONSECUTIVE_FAIL = 3; // 連続で失敗したら、今回は打ち切る
+
+  function loadQueue() {
+    try {
+      const q = JSON.parse(GM_getValue(QUEUE_STORE, "[]"));
+      return Array.isArray(q) ? q : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveQueue(q) {
+    try {
+      GM_setValue(QUEUE_STORE, JSON.stringify(q.slice(-MAX_QUEUE)));
+    } catch {
+      /* 保存できない環境では諦める */
+    }
+  }
+
+  function pendingCount() {
+    return loadQueue().length;
+  }
+
+  /**
+   * 再送しても直らない失敗かどうか。
+   * 中身が悪い場合は何度送っても同じなので捨てる。
+   * 401/403 は鍵や設定を直せば通るようになるため、残して再送する。
+   */
+  function isPermanentFailure(status) {
+    return status === 400 || status === 404 || status === 413 || status === 422;
+  }
+
+  let flushing = false;
+  let lastFlushAt = 0;
+
+  /** 溜まっている未送信データを順に送る */
+  function flush(force) {
+    const now = Date.now();
+    if (flushing) return Promise.resolve();
+    if (!force && now - lastFlushAt < RETRY_INTERVAL_MS) return Promise.resolve();
+    flushing = true;
+    lastFlushAt = now;
+
+    const q = loadQueue().filter((it) => now - it.at < MAX_AGE_MS);
+    if (q.length === 0) {
+      saveQueue([]);
+      flushing = false;
+      return Promise.resolve();
+    }
+    log("再送を試みます。未送信", q.length, "件");
+
+    const keep = [];
+    let consecutiveFail = 0;
+    let i = 0;
+
+    function step() {
+      // 続けて失敗するなら今はつながっていないと判断し、残りは次回に回す
+      if (consecutiveFail >= MAX_CONSECUTIVE_FAIL) {
+        for (let k = i; k < q.length; k++) keep.push(q[k]);
+        return Promise.resolve();
+      }
+      if (i >= q.length) return Promise.resolve();
+      const item = q[i++];
+      return postOnce(item.path, item.data).then((r) => {
+        if (r.ok) {
+          consecutiveFail = 0;
+          return step();
+        }
+        if (r.status && isPermanentFailure(r.status)) {
+          log("再送しても直らないため破棄", item, r);
+          consecutiveFail = 0;
+          return step();
+        }
+        item.tries += 1;
+        consecutiveFail += 1;
+        keep.push(item);
+        return step();
+      });
+    }
+
+    return step().then(
+      () => {
+        saveQueue(keep);
+        flushing = false;
+        if (keep.length === 0) log("未送信はすべて送信できました");
+        paintIndicator();
+      },
+      () => {
+        flushing = false;
+      }
+    );
+  }
+
+  /** 送る。失敗したら保存して、あとで自動的に送り直す。 */
+  function post(path, data) {
+    return postOnce(path, data).then((r) => {
+      // キーが未設定のときは貯めない（設定すれば次の検知から送られる）
+      if (r.noKey) return r;
+      if (r.ok) {
+        flush(true); // 送れる状態なら、溜まっていたぶんもこの機会に流す
+        return r;
+      }
+      if (r.status && isPermanentFailure(r.status)) return r;
+      const q = loadQueue();
+      q.push({ path, data, at: Date.now(), tries: 0 });
+      saveQueue(q);
+      log("未送信として保存しました。未送信", Math.min(q.length, MAX_QUEUE), "件");
+      paintIndicator();
+      return r;
+    });
+  }
+
   // ---- 画面すみの「記録中」表示（動いているか一目で分かるように） ----
   // 全画面表示の最中は、全画面になっている要素の中に入れないと画面に出てこない。
   // brain-program を全画面で使っていると、帯もポップアップも作られているのに
@@ -224,14 +345,9 @@
     }
     // 全画面の出入りで置き場所が変わるので、毎回いまの置き場所へ付け替える
     if (el.parentElement !== root) root.appendChild(el);
-    // キーが未設定のあいだは、記録できないことを示すだけでなく、
-    // 帯そのものを入力欄への入口にする。
+    // キーが未設定のあいだは、帯そのものを入力欄への入口にする。
     // ポップアップやTampermonkeyのメニューに頼ると、出ない・見つからないときに
     // 入力する手段が無くなって詰んでしまうため（実際に起きた）。
-    if (!apiKey && !el.__t) {
-      el.textContent = "⚠ APIキー未設定 － ここを押して入力";
-      el.style.background = "rgba(217,119,6,.95)";
-    }
     el.style.pointerEvents = apiKey ? "none" : "auto";
     el.style.cursor = apiKey ? "" : "pointer";
     if (!el.__bound) {
@@ -241,6 +357,30 @@
       });
     }
     return el;
+  }
+
+  /**
+   * 帯に今の状態を描く。
+   *
+   * 未送信が残っている間は赤いまま出し続ける。
+   * 失敗を2.8秒だけ赤くして緑に戻す作りだと、送れていないことに気づけず、
+   * 一日ぶんの記録が静かに失われた（2026-09-15）。
+   */
+  function paintIndicator() {
+    const el = ensureIndicator();
+    if (!el) return;
+    if (el.__t) return; // 一時表示の最中は上書きしない
+    const pending = pendingCount();
+    if (!apiKey) {
+      el.textContent = "⚠ APIキー未設定 － ここを押して入力";
+      el.style.background = "rgba(217,119,6,.95)";
+    } else if (pending > 0) {
+      el.textContent = "⚠ 未送信 " + pending + "件（自動で送り直します）";
+      el.style.background = "rgba(220,38,38,.95)"; // 赤：送れていない
+    } else {
+      el.textContent = "📡 記録中 v" + VERSION;
+      el.style.background = "rgba(16,185,129,.95)"; // 緑：正常
+    }
   }
 
   function flashIndicator(msg, ok) {
@@ -253,8 +393,7 @@
     clearTimeout(el.__t);
     el.__t = setTimeout(() => {
       el.__t = null;
-      el.textContent = apiKey ? "📡 記録中 v" + VERSION : "⚠ APIキー未設定";
-      el.style.background = apiKey ? "rgba(16,185,129,.95)" : "rgba(217,119,6,.95)";
+      paintIndicator();
     }, 2800);
   }
 
@@ -489,7 +628,10 @@
     };
     log("開始を送信", payload);
     post("/api/study/start", payload).then((r) => {
-      flashIndicator("▶ 開始を送信", r && r.ok);
+      flashIndicator(
+        r && r.ok ? "▶ 開始を送信" : "⚠ 送信失敗（保存して送り直します）",
+        r && r.ok
+      );
     });
   }
 
@@ -508,7 +650,10 @@
     log("結果を送信", data);
     post("/api/study/finish", data).then((r) => {
       const label = `${data.title ?? "結果"} ${data.score ?? ""}点`;
-      flashIndicator(r && r.ok ? `✓ 送信: ${label}` : "⚠ 送信失敗", r && r.ok);
+      flashIndicator(
+        r && r.ok ? `✓ 送信: ${label}` : "⚠ 送信失敗（保存して送り直します）",
+        r && r.ok
+      );
     });
   }
 
@@ -520,7 +665,8 @@
   // URL変化の監視（SPA対応）
   let lastUrl = location.href;
   setInterval(() => {
-    ensureIndicator(); // 消えないように毎回確保
+    paintIndicator(); // 消えないように毎回確保しつつ、未送信の件数も反映
+    flush(); // 溜まっているぶんの再送（内側で間隔を見ている）
     if (location.href !== lastUrl) {
       lastUrl = location.href;
       log("画面遷移:", location.href);
@@ -535,7 +681,7 @@
   // 全画面の出入りに追従して、帯とポップアップを今の置き場所へ移す
   ["fullscreenchange", "webkitfullscreenchange"].forEach((ev) =>
     document.addEventListener(ev, () => {
-      ensureIndicator();
+      paintIndicator();
       const popup = document.getElementById("smm-start-popup");
       const root = uiRoot();
       if (popup && root && popup.parentElement !== root) root.appendChild(popup);
@@ -551,7 +697,7 @@
   mo.observe(document.documentElement, { childList: true, subtree: true });
 
   // 帯はこの後 700ms ごとにも描き直すが、待たずにすぐ出す
-  ensureIndicator();
+  paintIndicator();
 
   // キーが未設定のうちは、1回だけブラウザ標準のダイアログでも知らせる。
   // 全画面表示中はページ内に描いたものが一切見えないため、動いているのに

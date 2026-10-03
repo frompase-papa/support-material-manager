@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         支援教材 学習記録ブリッジ（旧ブラウザ対応版）
 // @namespace    support-material-manager
-// @version      1.6.0
+// @version      1.7.0
 // @description  brain-program の学習開始・結果を支援教材管理アプリへ自動送信します（拡張機能版と同じ動き）。
 // @author       支援教材管理アプリ
 // @match        *://*/*
@@ -19,7 +19,7 @@
 "use strict";
 (function() {
   "use strict";
-  const VERSION = "1.6.0";
+  const VERSION = "1.7.0";
   const DIAG = /smmtest/i.test(location.hash);
   const IS_TARGET = /brain-program/i.test(location.hostname);
   if (!IS_TARGET && !DIAG) return;
@@ -88,10 +88,10 @@
     });
   } catch (e) {
   }
-  function post(path, data) {
+  function postOnce(path, data) {
     if (!apiKey) {
       log("API\u30AD\u30FC\u304C\u672A\u8A2D\u5B9A\u306E\u305F\u3081\u9001\u4FE1\u3057\u307E\u305B\u3093");
-      return Promise.resolve({ ok: false });
+      return Promise.resolve({ ok: false, noKey: true });
     }
     const url = CONFIG.apiBase + path;
     const body = JSON.stringify(data);
@@ -122,6 +122,100 @@
       return { ok: false };
     });
   }
+  const QUEUE_STORE = "smm-pending";
+  const MAX_QUEUE = 300;
+  const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1e3;
+  const RETRY_INTERVAL_MS = 2e4;
+  const MAX_CONSECUTIVE_FAIL = 3;
+  function loadQueue() {
+    try {
+      const q = JSON.parse(GM_getValue(QUEUE_STORE, "[]"));
+      return Array.isArray(q) ? q : [];
+    } catch (e) {
+      return [];
+    }
+  }
+  function saveQueue(q) {
+    try {
+      GM_setValue(QUEUE_STORE, JSON.stringify(q.slice(-MAX_QUEUE)));
+    } catch (e) {
+    }
+  }
+  function pendingCount() {
+    return loadQueue().length;
+  }
+  function isPermanentFailure(status) {
+    return status === 400 || status === 404 || status === 413 || status === 422;
+  }
+  let flushing = false;
+  let lastFlushAt = 0;
+  function flush(force) {
+    const now = Date.now();
+    if (flushing) return Promise.resolve();
+    if (!force && now - lastFlushAt < RETRY_INTERVAL_MS) return Promise.resolve();
+    flushing = true;
+    lastFlushAt = now;
+    const q = loadQueue().filter((it) => now - it.at < MAX_AGE_MS);
+    if (q.length === 0) {
+      saveQueue([]);
+      flushing = false;
+      return Promise.resolve();
+    }
+    log("\u518D\u9001\u3092\u8A66\u307F\u307E\u3059\u3002\u672A\u9001\u4FE1", q.length, "\u4EF6");
+    const keep = [];
+    let consecutiveFail = 0;
+    let i = 0;
+    function step() {
+      if (consecutiveFail >= MAX_CONSECUTIVE_FAIL) {
+        for (let k = i; k < q.length; k++) keep.push(q[k]);
+        return Promise.resolve();
+      }
+      if (i >= q.length) return Promise.resolve();
+      const item = q[i++];
+      return postOnce(item.path, item.data).then((r) => {
+        if (r.ok) {
+          consecutiveFail = 0;
+          return step();
+        }
+        if (r.status && isPermanentFailure(r.status)) {
+          log("\u518D\u9001\u3057\u3066\u3082\u76F4\u3089\u306A\u3044\u305F\u3081\u7834\u68C4", item, r);
+          consecutiveFail = 0;
+          return step();
+        }
+        item.tries += 1;
+        consecutiveFail += 1;
+        keep.push(item);
+        return step();
+      });
+    }
+    return step().then(
+      () => {
+        saveQueue(keep);
+        flushing = false;
+        if (keep.length === 0) log("\u672A\u9001\u4FE1\u306F\u3059\u3079\u3066\u9001\u4FE1\u3067\u304D\u307E\u3057\u305F");
+        paintIndicator();
+      },
+      () => {
+        flushing = false;
+      }
+    );
+  }
+  function post(path, data) {
+    return postOnce(path, data).then((r) => {
+      if (r.noKey) return r;
+      if (r.ok) {
+        flush(true);
+        return r;
+      }
+      if (r.status && isPermanentFailure(r.status)) return r;
+      const q = loadQueue();
+      q.push({ path, data, at: Date.now(), tries: 0 });
+      saveQueue(q);
+      log("\u672A\u9001\u4FE1\u3068\u3057\u3066\u4FDD\u5B58\u3057\u307E\u3057\u305F\u3002\u672A\u9001\u4FE1", Math.min(q.length, MAX_QUEUE), "\u4EF6");
+      paintIndicator();
+      return r;
+    });
+  }
   function uiRoot() {
     return document.fullscreenElement || document.webkitFullscreenElement || document.body;
   }
@@ -136,10 +230,6 @@
       el.textContent = "\u{1F4E1} \u8A18\u9332\u4E2D v" + VERSION;
     }
     if (el.parentElement !== root) root.appendChild(el);
-    if (!apiKey && !el.__t) {
-      el.textContent = "\u26A0 API\u30AD\u30FC\u672A\u8A2D\u5B9A \uFF0D \u3053\u3053\u3092\u62BC\u3057\u3066\u5165\u529B";
-      el.style.background = "rgba(217,119,6,.95)";
-    }
     el.style.pointerEvents = apiKey ? "none" : "auto";
     el.style.cursor = apiKey ? "" : "pointer";
     if (!el.__bound) {
@@ -150,6 +240,22 @@
     }
     return el;
   }
+  function paintIndicator() {
+    const el = ensureIndicator();
+    if (!el) return;
+    if (el.__t) return;
+    const pending = pendingCount();
+    if (!apiKey) {
+      el.textContent = "\u26A0 API\u30AD\u30FC\u672A\u8A2D\u5B9A \uFF0D \u3053\u3053\u3092\u62BC\u3057\u3066\u5165\u529B";
+      el.style.background = "rgba(217,119,6,.95)";
+    } else if (pending > 0) {
+      el.textContent = "\u26A0 \u672A\u9001\u4FE1 " + pending + "\u4EF6\uFF08\u81EA\u52D5\u3067\u9001\u308A\u76F4\u3057\u307E\u3059\uFF09";
+      el.style.background = "rgba(220,38,38,.95)";
+    } else {
+      el.textContent = "\u{1F4E1} \u8A18\u9332\u4E2D v" + VERSION;
+      el.style.background = "rgba(16,185,129,.95)";
+    }
+  }
   function flashIndicator(msg, ok) {
     const el = ensureIndicator();
     if (!el) return;
@@ -158,8 +264,7 @@
     clearTimeout(el.__t);
     el.__t = setTimeout(() => {
       el.__t = null;
-      el.textContent = apiKey ? "\u{1F4E1} \u8A18\u9332\u4E2D v" + VERSION : "\u26A0 API\u30AD\u30FC\u672A\u8A2D\u5B9A";
-      el.style.background = apiKey ? "rgba(16,185,129,.95)" : "rgba(217,119,6,.95)";
+      paintIndicator();
     }, 2800);
   }
   const POPUP_SHOWN_KEY = "smm-start-popup-shown";
@@ -325,7 +430,10 @@
     };
     log("\u958B\u59CB\u3092\u9001\u4FE1", payload);
     post("/api/study/start", payload).then((r) => {
-      flashIndicator("\u25B6 \u958B\u59CB\u3092\u9001\u4FE1", r && r.ok);
+      flashIndicator(
+        r && r.ok ? "\u25B6 \u958B\u59CB\u3092\u9001\u4FE1" : "\u26A0 \u9001\u4FE1\u5931\u6557\uFF08\u4FDD\u5B58\u3057\u3066\u9001\u308A\u76F4\u3057\u307E\u3059\uFF09",
+        r && r.ok
+      );
     });
   }
   function handleFinish() {
@@ -340,7 +448,10 @@
     post("/api/study/finish", data).then((r) => {
       var _a, _b;
       const label = `${(_a = data.title) != null ? _a : "\u7D50\u679C"} ${(_b = data.score) != null ? _b : ""}\u70B9`;
-      flashIndicator(r && r.ok ? `\u2713 \u9001\u4FE1: ${label}` : "\u26A0 \u9001\u4FE1\u5931\u6557", r && r.ok);
+      flashIndicator(
+        r && r.ok ? `\u2713 \u9001\u4FE1: ${label}` : "\u26A0 \u9001\u4FE1\u5931\u6557\uFF08\u4FDD\u5B58\u3057\u3066\u9001\u308A\u76F4\u3057\u307E\u3059\uFF09",
+        r && r.ok
+      );
     });
   }
   function handleAll() {
@@ -349,7 +460,8 @@
   }
   let lastUrl = location.href;
   setInterval(() => {
-    ensureIndicator();
+    paintIndicator();
+    flush();
     if (location.href !== lastUrl) {
       lastUrl = location.href;
       log("\u753B\u9762\u9077\u79FB:", location.href);
@@ -360,7 +472,7 @@
   window.addEventListener("popstate", () => setTimeout(handleAll, 300));
   ["fullscreenchange", "webkitfullscreenchange"].forEach(
     (ev) => document.addEventListener(ev, () => {
-      ensureIndicator();
+      paintIndicator();
       const popup = document.getElementById("smm-start-popup");
       const root = uiRoot();
       if (popup && root && popup.parentElement !== root) root.appendChild(popup);
@@ -372,7 +484,7 @@
     moTimer = setTimeout(handleAll, 400);
   });
   mo.observe(document.documentElement, { childList: true, subtree: true });
-  ensureIndicator();
+  paintIndicator();
   let noticeShown = false;
   function notifyUnconfigured() {
     if (noticeShown || apiKey) return;

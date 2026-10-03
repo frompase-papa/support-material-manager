@@ -15,7 +15,8 @@ function makeEl(tag) {
     addEventListener() {}, remove() {},
   };
 }
-function run({ hostname, hash, owner }) {
+function run({ hostname, hash, owner, gmStore }) {
+  const gm = Object.assign({}, gmStore);
   const byId = new Map();
   const body = makeEl("body");
   const timers = [];
@@ -40,7 +41,8 @@ function run({ hostname, hash, owner }) {
     sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     MutationObserver: class { observe() {} },
     URLSearchParams: URLSearchParams,
-    GM_getValue: () => "", GM_setValue() {}, GM_registerMenuCommand() {},
+    GM_getValue: (k, d) => (k in gm ? gm[k] : d !== undefined ? d : ""),
+    GM_setValue: (k, v) => { gm[k] = v; }, GM_registerMenuCommand() {},
     GM_xmlhttpRequest() {},
   };
   sandbox.self = sandbox; sandbox.globalThis = sandbox;
@@ -50,7 +52,7 @@ function run({ hostname, hash, owner }) {
   vm.createContext(sandbox);
   let error = null;
   try { vm.runInContext(code, sandbox); for (const f of timers.slice(0, 50)) { try { f(); } catch {} } } catch (e) { error = e; }
-  return { error, byId, body, html };
+  return { error, byId, body, html, gm };
 }
 
 const out = [];
@@ -110,6 +112,40 @@ const check = (n, ok, x = "") => out.push(`${ok ? "PASS" : "**FAIL**"}  ${n}${x 
     "先に動いた側は印を残す",
     r.html.getAttribute("data-smm-bridge-owner") !== null,
     String(r.html.getAttribute("data-smm-bridge-owner"))
+  );
+}
+
+// 7) 未送信が残っているときは、件数を帯に出し続ける
+{
+  const pending = JSON.stringify([
+    { path: "/api/study/finish", data: {}, at: Date.now(), tries: 1 },
+    { path: "/api/study/finish", data: {}, at: Date.now(), tries: 1 },
+  ]);
+  const r = run({
+    hostname: "www.brain-program-001.com",
+    hash: "",
+    gmStore: { "smm-api-key": "k", "smm-pending": pending },
+  });
+  const el = r.byId.get("smm-rec-indicator");
+  check(
+    "未送信があれば件数を出し続ける（静かに失われないように）",
+    !!el && /未送信 2件/.test(el.textContent),
+    el ? el.textContent : "帯なし"
+  );
+}
+
+// 8) 未送信が無ければ通常の表示に戻る
+{
+  const r = run({
+    hostname: "www.brain-program-001.com",
+    hash: "",
+    gmStore: { "smm-api-key": "k" },
+  });
+  const el = r.byId.get("smm-rec-indicator");
+  check(
+    "未送信が無ければ記録中と出る",
+    !!el && /記録中/.test(el.textContent),
+    el ? el.textContent : "帯なし"
   );
 }
 
