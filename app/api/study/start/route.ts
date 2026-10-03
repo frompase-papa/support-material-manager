@@ -7,6 +7,7 @@ import {
   checkApiKey,
   dedupeDocId,
   strOrNull,
+  todayKey,
 } from "@/app/lib/studyApi";
 
 export const runtime = "nodejs";
@@ -51,8 +52,9 @@ export async function POST(req: Request) {
 
   const title = strOrNull(body.title);
 
-  // 同じ内容が複数のブリッジから届いても1件にまとめる（IDを内容から決める）
-  const id = dedupeDocId("start", [studentId, title]);
+  // 開始イベントには点数が無く、送り直しと2回目を見分ける手がかりが無い。
+  // 一覧には使わない（診断用）ので、1日1件にまとめておく。
+  const id = dedupeDocId("start", [studentId, title, todayKey()]);
 
   await db.collection("studyEvents").doc(id).set(
     {

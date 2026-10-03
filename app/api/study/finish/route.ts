@@ -52,10 +52,23 @@ export async function POST(req: Request) {
 
   const title = strOrNull(body.title);
   const score = numOrNull(body.score);
+  const average = numOrNull(body.average);
+  const max = numOrNull(body.max);
+  const cumulative = numOrNull(body.cumulative);
   const studyDate = strOrNull(body.date);
 
-  // 同じ内容が複数のブリッジから届いても1件にまとめる（IDを内容から決める）
-  const id = dedupeDocId("finish", [studentId, title, score, studyDate]);
+  // 同じ内容が複数のブリッジから届いても1件にまとめる（IDを内容から決める）。
+  // 累計点・平均点・最高点まで含めるのが肝。これらはやり直すと必ず変わるので、
+  // 「送り直し」と「本当にもう一度やった」を取り違えずに済む。
+  const id = dedupeDocId("finish", [
+    studentId,
+    title,
+    score,
+    cumulative,
+    average,
+    max,
+    studyDate,
+  ]);
 
   await db.collection("studyEvents").doc(id).set(
     {
@@ -64,9 +77,9 @@ export async function POST(req: Request) {
       studentName: strOrNull(body.studentName),
       title,
       score,
-      average: numOrNull(body.average),
-      max: numOrNull(body.max),
-      cumulative: numOrNull(body.cumulative),
+      average,
+      max,
+      cumulative,
       studyDate, // 実施日（サイト表記そのまま）
       roomId: strOrNull(body.roomId),
       receivedAt: FieldValue.serverTimestamp(),

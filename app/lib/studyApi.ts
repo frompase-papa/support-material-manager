@@ -36,26 +36,36 @@ export function numOrNull(v: unknown): number | null {
  * 同じ内容の記録を1件にまとめるためのドキュメントID。
  *
  * 拡張機能・ユーザースクリプト・ブックマークレットは、どれも同じ画面を見て
- * 同じ内容を送る。タブレットに複数入っていると同じ結果が2件3件と記録される
- * （実際に「同じ内容が3回連続」で起きた）。送信の失敗を再送したときも同様。
+ * 同じ内容を送る。複数入っていたり、再ログイン後に押し直したり、送信失敗を
+ * 再送したりすると、同じ結果が何件も記録される。
  *
- * 内容と「10分の時間帯」から決まるIDを使い、同じものは上書きにする。
- * 時間帯を混ぜてあるので、同じ教材を時間をおいてもう一度やった場合は
- * 別の記録として残る。
+ * ★ 時間では区切らないこと。
+ *   以前は「10分の時間帯」を混ぜていたが、
+ *   - 区切りの境目をまたぐと、数秒差の同じ内容が別件として残る（回数が増える）
+ *   - 区切りの中では、本当にもう一度やった分が1件に潰れる（回数が減る）
+ *   という両方の不具合が出た（8回のはずが9回・7回になる、として報告された）。
+ *
+ * 代わりに、やり直すと必ず変わる値（累計点・平均点・最高点）をキーに含める。
+ * 同じ検知を送り直したときは全項目が同じなので1件にまとまり、
+ * 本当に2回やったときは累計点が増えているので別件として残る。
  */
 export function dedupeDocId(
   type: "start" | "finish",
   parts: (string | number | null)[]
 ): string {
-  const bucket = Math.floor(Date.now() / (10 * 60 * 1000));
-  const key = [type, ...parts.map((p) => (p === null ? "" : String(p))), bucket]
-    .join("|");
+  const key = [type, ...parts.map((p) => (p === null ? "" : String(p)))].join("|");
   // Firestore のIDに使える文字だけにする
   return (
     type +
     "_" +
     Buffer.from(key, "utf8").toString("base64url").slice(0, 120)
   );
+}
+
+/** その日かどうかだけを表す文字列（開始イベントのキーに使う） */
+export function todayKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 }
 
 export function strOrNull(v: unknown): string | null {

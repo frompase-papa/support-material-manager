@@ -110,16 +110,23 @@ export function StudyDashboard() {
   // 表示側でも「同じ生徒・同じ教材・同じ点数」が近い時刻に並んだら1件にする。
   const realFinishes = useMemo(() => {
     const list = events.filter((e) => e.type === "finish" && isRealStudent(e));
-    const seen = new Map<string, number>();
+    const seen = new Set<string>();
     return list.filter((e) => {
-      const at = e.receivedAt ? e.receivedAt.getTime() : 0;
-      const key = [nameOf(e), e.title ?? "", e.score ?? "", e.studyDate ?? ""].join(
-        "|"
-      );
-      const prev = seen.get(key);
-      // 10分以内に同じ内容が来ていたら重複とみなす
-      if (prev !== undefined && Math.abs(at - prev) < 10 * 60 * 1000) return false;
-      seen.set(key, at);
+      // 累計点・平均点・最高点まで含めて比べる。
+      // ここを「生徒・教材・点数」だけで比べ、さらに時間で区切っていたため、
+      // 同じ点数が出た2回目を重複と誤判定して隠していた（8回が7回に見えた）。
+      // やり直せば累計点は必ず変わるので、完全に一致する行だけをまとめる。
+      const key = [
+        nameOf(e),
+        e.title ?? "",
+        e.score ?? "",
+        e.cumulative ?? "",
+        e.average ?? "",
+        e.max ?? "",
+        e.studyDate ?? "",
+      ].join("|");
+      if (seen.has(key)) return false;
+      seen.add(key);
       return true;
     });
   }, [events]);
