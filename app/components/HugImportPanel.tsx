@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { parseHugMonth } from "@/app/lib/hugImport";
+import { buildNameMap, applyNameMap } from "@/app/lib/nameMatch";
 import type { AttendanceStore, ImportResult } from "@/app/hooks/useAttendanceStore";
 
 /**
@@ -53,6 +54,55 @@ export function HugImportPanel({
       setText("");
     } catch {
       setError("取込中にエラーが発生しました。貼り付け内容をご確認ください。");
+    }
+  };
+
+  // 送迎管理アプリから、その月の出欠をそのまま取り込む。
+  // 送迎アプリ側はHUGの取り込みと当日の調整で出欠が最も正確なので、
+  // HUGのテキストを貼り直さなくてよくなる
+  const [syncing, setSyncing] = useState(false);
+  const [unmatched, setUnmatched] = useState<string[]>([]);
+
+  const handleSyncFromShift = async () => {
+    setError(null);
+    setResult(null);
+    setUnmatched([]);
+    setSyncing(true);
+    try {
+      const monthStr = `${year}-${String(month).padStart(2, "0")}`;
+      const res = await fetch(`/api/shift-attendance?month=${monthStr}`, { cache: "no-store" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) {
+        setError(data?.error ?? "送迎アプリから取り込めませんでした。");
+        return;
+      }
+      if (Object.keys(data.presentByDate ?? {}).length === 0) {
+        setError(`送迎アプリに ${year}年${month}月 の送迎データがありませんでした。`);
+        return;
+      }
+
+      // 名簿が二重にならないよう、既にいる児童名へそろえる
+      const existing = store.students.map((st) => st.name);
+      const { map, unmatched: miss } = buildNameMap(data.studentNames ?? [], existing);
+      const fix = (byDate: Record<string, string[]>) =>
+        Object.fromEntries(
+          Object.entries(byDate).map(([d, names]) => [d, applyNameMap(names, map)])
+        );
+
+      const r = store.importMonth({
+        year: data.year,
+        month: data.month,
+        days: [],
+        presentByDate: fix(data.presentByDate ?? {}),
+        absentByDate: fix(data.absentByDate ?? {}),
+        studentNames: applyNameMap(data.studentNames ?? [], map),
+      });
+      setResult(r);
+      setUnmatched(miss);
+    } catch {
+      setError("送迎アプリへの通信に失敗しました。");
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -115,6 +165,35 @@ export function HugImportPanel({
           </select>
         </div>
 
+        {/* 送迎アプリから直接取り込む（コピペ不要）。
+            出欠は送迎アプリ側が最も正確なので、こちらを先に案内する */}
+        <div className="mb-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-3 dark:border-blue-900 dark:bg-blue-950/30">
+          <div className="text-sm font-bold text-blue-900 dark:text-blue-200">
+            送迎管理アプリから取り込む（おすすめ）
+          </div>
+          <p className="mt-0.5 text-xs text-blue-800 dark:text-blue-300">
+            送迎アプリに入っている{year}年{month}月の「利用／休み」をそのまま取り込みます。
+            HUGの貼り付けは不要です。
+          </p>
+          <button
+            type="button"
+            onClick={handleSyncFromShift}
+            disabled={syncing}
+            className="mt-2 w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {syncing ? "取り込み中…" : `送迎アプリから${year}年${month}月を取り込む`}
+          </button>
+        </div>
+
+        {unmatched.length > 0 && (
+          <p className="mb-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+            名簿に見つからなかった児童（新しく追加されました）：{unmatched.join("、")}
+          </p>
+        )}
+
+        <div className="mb-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+          または、HUGの出席カレンダーを貼り付ける
+        </div>
         {/* 貼り付け欄 */}
         <textarea
           value={text}
