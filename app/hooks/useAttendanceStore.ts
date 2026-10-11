@@ -151,6 +151,8 @@ export function useAttendanceStore(): AttendanceStore {
   const [overrides, setOverrides] = useState<Record<string, Material>>({});
   const [presentByDate, setPresentByDate] = useState<Record<string, string[]>>({});
   const [absentByDate, setAbsentByDate] = useState<Record<string, string[]>>({});
+  // 送迎アプリ側でお休みになった児童（送迎アプリからのみ書き込まれる）
+  const [transportAbsences, setTransportAbsences] = useState<Record<string, string[]>>({});
   const [materials, setMaterials] = useState<TeachingMaterial[]>(
     DEFAULT_TEACHING_MATERIALS
   );
@@ -176,6 +178,7 @@ export function useAttendanceStore(): AttendanceStore {
     setOverrides(d.overrides ?? {});
     setPresentByDate(d.presentByDate ?? {});
     setAbsentByDate(d.absentByDate ?? {});
+    setTransportAbsences(d.transportAbsences ?? {});
     if (d.materials) setMaterials(d.materials);
     setAssignments(d.assignments ?? {});
     setNotes(d.notes ?? {});
@@ -244,6 +247,7 @@ export function useAttendanceStore(): AttendanceStore {
       assessmentUrl,
       supportPrograms,
       supportAssignments,
+      transportAbsences,
     }),
     [
       typeById,
@@ -397,12 +401,15 @@ export function useAttendanceStore(): AttendanceStore {
   const records = useMemo<AttendanceRecord[]>(() => {
     const recs: AttendanceRecord[] = [];
     for (const [dateKey, ids] of Object.entries(presentByDate)) {
+      // 送迎アプリでお休みになった子は、その日の出席から外す（送迎アプリを正とする）
+      const off = new Set(transportAbsences[dateKey] ?? []);
       for (const id of ids) {
+        if (off.has(id)) continue;
         recs.push({ id: makeRecordId(id, dateKey), studentId: id, date: dateKey });
       }
     }
     return recs;
-  }, [presentByDate]);
+  }, [presentByDate, transportAbsences]);
 
   const resolved = useMemo(
     () => resolveAttendance(students, records, overrides),

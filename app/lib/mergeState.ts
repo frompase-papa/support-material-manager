@@ -27,6 +27,16 @@ export interface PersistedState {
   supportPrograms: SupportProgram[];
   /** 専門支援の割り当て recordId -> 専門支援id[] */
   supportAssignments: Record<string, string[]>;
+  /**
+   * 送迎管理アプリ側で「お休み」になった児童。dateKey -> 児童名[]
+   *
+   * 月のカレンダー取込（presentByDate）とは別に持つ。同じ場所に書くと
+   *   ・月を取り込み直すと消える
+   *   ・画面を開いている端末の保存で上書きされる
+   * ため、送迎アプリを正とする休みが保てない。
+   * この欄は送迎アプリからのみ書き、画面側は読むだけにする。
+   */
+  transportAbsences: Record<string, string[]>;
 }
 
 /** null/空配列/空オブジェクト/空文字 を「空」とみなす */
@@ -80,5 +90,6 @@ export function mergePreferNonEmpty(
     assessmentUrl: pick(local.assessmentUrl, cloud.assessmentUrl),
     supportPrograms: pick(local.supportPrograms, cloud.supportPrograms),
     supportAssignments: pick(local.supportAssignments, cloud.supportAssignments),
+    transportAbsences: pick(local.transportAbsences, cloud.transportAbsences),
   };
 }
