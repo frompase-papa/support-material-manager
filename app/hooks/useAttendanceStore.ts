@@ -153,6 +153,8 @@ export function useAttendanceStore(): AttendanceStore {
   const [absentByDate, setAbsentByDate] = useState<Record<string, string[]>>({});
   // 送迎アプリ側でお休みになった児童（送迎アプリからのみ書き込まれる）
   const [transportAbsences, setTransportAbsences] = useState<Record<string, string[]>>({});
+  // 送迎アプリ側で「来る」になっている児童（月の予定に無い追加利用もここに入る）
+  const [transportAdditions, setTransportAdditions] = useState<Record<string, string[]>>({});
   const [materials, setMaterials] = useState<TeachingMaterial[]>(
     DEFAULT_TEACHING_MATERIALS
   );
@@ -179,6 +181,7 @@ export function useAttendanceStore(): AttendanceStore {
     setPresentByDate(d.presentByDate ?? {});
     setAbsentByDate(d.absentByDate ?? {});
     setTransportAbsences(d.transportAbsences ?? {});
+    setTransportAdditions(d.transportAdditions ?? {});
     if (d.materials) setMaterials(d.materials);
     setAssignments(d.assignments ?? {});
     setNotes(d.notes ?? {});
@@ -248,6 +251,7 @@ export function useAttendanceStore(): AttendanceStore {
       supportPrograms,
       supportAssignments,
       transportAbsences,
+      transportAdditions,
     }),
     [
       typeById,
@@ -386,6 +390,8 @@ export function useAttendanceStore(): AttendanceStore {
     const names = new Set<string>();
     for (const list of Object.values(presentByDate)) list.forEach((n) => names.add(n));
     for (const list of Object.values(absentByDate)) list.forEach((n) => names.add(n));
+    // 送迎アプリから来た子も名簿に入れる（月の予定に無い追加利用の初日でも出せるように）
+    for (const list of Object.values(transportAdditions)) list.forEach((n) => names.add(n));
     Object.keys(typeById).forEach((n) => names.add(n));
 
     return [...names]
@@ -396,20 +402,29 @@ export function useAttendanceStore(): AttendanceStore {
         type: typeById[name] ?? DEFAULT_STUDENT_TYPE,
         color: colorForName(name),
       }));
-  }, [presentByDate, absentByDate, typeById]);
+  }, [presentByDate, absentByDate, transportAdditions, typeById]);
 
+  // 出席は「月のカレンダー取込 ＋ 送迎アプリの来る子 − 送迎アプリの休みの子」。
+  // 送迎アプリを正とするので、月の予定に無い追加利用も出て、休みは外れる
   const records = useMemo<AttendanceRecord[]>(() => {
+    const dates = new Set([
+      ...Object.keys(presentByDate),
+      ...Object.keys(transportAdditions),
+    ]);
     const recs: AttendanceRecord[] = [];
-    for (const [dateKey, ids] of Object.entries(presentByDate)) {
-      // 送迎アプリでお休みになった子は、その日の出席から外す（送迎アプリを正とする）
+    for (const dateKey of dates) {
       const off = new Set(transportAbsences[dateKey] ?? []);
+      const ids = new Set([
+        ...(presentByDate[dateKey] ?? []),
+        ...(transportAdditions[dateKey] ?? []),
+      ]);
       for (const id of ids) {
         if (off.has(id)) continue;
         recs.push({ id: makeRecordId(id, dateKey), studentId: id, date: dateKey });
       }
     }
     return recs;
-  }, [presentByDate, transportAbsences]);
+  }, [presentByDate, transportAdditions, transportAbsences]);
 
   const resolved = useMemo(
     () => resolveAttendance(students, records, overrides),

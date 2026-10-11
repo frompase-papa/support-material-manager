@@ -37,6 +37,13 @@ export interface PersistedState {
    * この欄は送迎アプリからのみ書き、画面側は読むだけにする。
    */
   transportAbsences: Record<string, string[]>;
+  /**
+   * 送迎管理アプリ側で「来る」になっている児童。dateKey -> 児童名[]
+   *
+   * 月の予定に無い追加利用の子を出すために使う。transportAbsences と同じ理由で
+   * presentByDate とは別の欄に持つ。
+   */
+  transportAdditions: Record<string, string[]>;
 }
 
 /** null/空配列/空オブジェクト/空文字 を「空」とみなす */
@@ -91,5 +98,6 @@ export function mergePreferNonEmpty(
     supportPrograms: pick(local.supportPrograms, cloud.supportPrograms),
     supportAssignments: pick(local.supportAssignments, cloud.supportAssignments),
     transportAbsences: pick(local.transportAbsences, cloud.transportAbsences),
+    transportAdditions: pick(local.transportAdditions, cloud.transportAdditions),
   };
 }

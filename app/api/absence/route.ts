@@ -1,11 +1,14 @@
-// 送迎管理アプリから「その日お休みになった児童」を受け取って保存するAPI。
+// 送迎管理アプリから「その日の出欠」を受け取って保存するAPI。
 //
-// 送迎アプリで送迎表を取り込む／ボードでお休みにすると、ここが呼ばれる。
-// 出欠は送迎アプリを正とするので、こちらの画面ではその子を出席から外す。
+// 送迎アプリで送迎表を取り込む／ボードで出欠を変えると、ここが呼ばれる。
+// 出欠は送迎アプリを正とするので、こちらの画面では
+//   月のカレンダー取込 ＋ 送迎アプリの来る子 − 送迎アプリの休みの子
+// として出席を出す。月の予定に無い追加利用の子も出るようになる。
 //
-// 保存先は workspace ドキュメントの transportAbsences（dateKey -> 児童名[]）。
-// 月のカレンダー取込（presentByDate）とは別の欄にしてある。同じ欄に書くと
-// 月を取り込み直したときに消えてしまい、送迎アプリの休みが保てないため。
+// 保存先は workspace ドキュメントの transportAbsences / transportAdditions
+// （どちらも dateKey -> 児童名[]）。月のカレンダー取込（presentByDate）とは
+// 別の欄にしてある。同じ欄に書くと、月を取り込み直したときに消えてしまい、
+// 送迎アプリの出欠が保てないため。
 //
 // 認証: ヘッダー x-api-key が SHIFT_ATTENDANCE_API_KEY と一致すること
 // （送迎アプリから出欠を読むときと同じ合言葉を使う）。
@@ -50,7 +53,7 @@ export async function POST(req: Request) {
   }
 
   const body = (await req.json().catch(() => null)) as
-    | { date?: string; absentNames?: unknown }
+    | { date?: string; absentNames?: unknown; presentNames?: unknown }
     | null;
   const date = typeof body?.date === "string" ? body.date : "";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -59,9 +62,10 @@ export async function POST(req: Request) {
       { status: 400, headers: CORS_HEADERS }
     );
   }
-  const incoming = Array.isArray(body?.absentNames)
-    ? body!.absentNames.filter((n): n is string => typeof n === "string" && n.trim() !== "")
-    : [];
+  const asNames = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((n): n is string => typeof n === "string" && n.trim() !== "") : [];
+  const incomingAbsent = asNames(body?.absentNames);
+  const incomingPresent = asNames(body?.presentNames);
 
   const db = getAdminDb();
   if (!db) {
@@ -97,30 +101,50 @@ export async function POST(req: Request) {
       const k = normalizeName(n);
       if (!byNormalized.has(k)) byNormalized.set(k, n);
     }
-    const matched: string[] = [];
+    const ja = (a: string, b: string) => a.localeCompare(b, "ja");
     const unmatched: string[] = [];
-    for (const n of incoming) {
-      const hit = byNormalized.get(normalizeName(n));
-      if (hit) matched.push(hit);
-      else unmatched.push(n);
-    }
+    // 名簿に無い子は、送迎アプリの名前のまま入れる（追加利用の初日など、
+    // まだこのアプリが知らない児童がいるため）。呼び出し側へも返して気づけるようにする
+    const fold = (names: string[]): string[] => {
+      const out: string[] = [];
+      for (const n of names) {
+        const hit = byNormalized.get(normalizeName(n));
+        if (hit) out.push(hit);
+        else { out.push(n); unmatched.push(n); }
+      }
+      return [...new Set(out)].sort(ja);
+    };
+    const absent = fold(incomingAbsent);
+    const present = fold(incomingPresent);
 
-    const prev = (data.transportAbsences as Record<string, string[]> | undefined) ?? {};
-    const next = { ...prev };
-    // その日ぶんは毎回まるごと置き換える（送迎アプリ側でお休みを取り消したら、
-    // こちらも休みでなくなるようにするため）
-    if (matched.length > 0) next[date] = [...new Set(matched)].sort((a, b) => a.localeCompare(b, "ja"));
-    else delete next[date];
+    // その日ぶんは毎回まるごと置き換える（送迎アプリ側で戻したら、こちらも戻るように）
+    const put = (key: string, names: string[]) => {
+      const prev = (data[key] as Record<string, string[]> | undefined) ?? {};
+      const next = { ...prev };
+      if (names.length > 0) next[date] = names;
+      else delete next[date];
+      return next;
+    };
 
-    tx.set(ref, { json: JSON.stringify({ ...data, transportAbsences: next }) }, { merge: true });
-    return { ok: true as const, applied: matched, unmatched };
+    tx.set(
+      ref,
+      {
+        json: JSON.stringify({
+          ...data,
+          transportAbsences: put("transportAbsences", absent),
+          transportAdditions: put("transportAdditions", present),
+        }),
+      },
+      { merge: true }
+    );
+    return { ok: true as const, absent, present, unmatched: [...new Set(unmatched)] };
   });
 
   if (!result.ok) {
     return Response.json(result, { status: 500, headers: CORS_HEADERS });
   }
   return Response.json(
-    { ok: true, date, applied: result.applied, unmatched: result.unmatched },
+    { ok: true, date, absent: result.absent, present: result.present, unmatched: result.unmatched },
     { headers: CORS_HEADERS }
   );
 }
