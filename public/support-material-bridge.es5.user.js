@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         支援教材 学習記録ブリッジ（旧ブラウザ対応版）
 // @namespace    support-material-manager
-// @version      1.7.0
+// @version      1.8.0
 // @description  brain-program の学習開始・結果を支援教材管理アプリへ自動送信します（拡張機能版と同じ動き）。
 // @author       支援教材管理アプリ
 // @match        *://*/*
@@ -19,7 +19,7 @@
 "use strict";
 (function() {
   "use strict";
-  const VERSION = "1.7.0";
+  const VERSION = "1.8.0";
   const DIAG = /smmtest/i.test(location.hash);
   const IS_TARGET = /brain-program/i.test(location.hostname);
   if (!IS_TARGET && !DIAG) return;
@@ -414,8 +414,25 @@
   }
   let lastStartSig = "";
   let lastFinishSig = "";
+  function newEventId() {
+    return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+  }
+  function nextSeq() {
+    const d = /* @__PURE__ */ new Date();
+    const key = "smm-seq-" + d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+    let n = 0;
+    try {
+      n = parseInt(GM_getValue(key, "0"), 10) || 0;
+      GM_setValue(key, String(n + 1));
+    } catch (e) {
+    }
+    return n + 1;
+  }
   function handleStart() {
-    if (!CONFIG.startUrlPattern.test(location.href)) return;
+    if (!CONFIG.startUrlPattern.test(location.href)) {
+      lastStartSig = "";
+      return;
+    }
     const params = getParams();
     if (!params.studentId) return;
     const title = params.categoryId ? `\u30AB\u30C6\u30B4\u30EA${params.categoryId}-${params.trainingId}` : null;
@@ -426,7 +443,8 @@
       studentId: params.studentId,
       roomId: params.roomId,
       title,
-      startTime: (/* @__PURE__ */ new Date()).toISOString()
+      startTime: (/* @__PURE__ */ new Date()).toISOString(),
+      eventId: newEventId()
     };
     log("\u958B\u59CB\u3092\u9001\u4FE1", payload);
     post("/api/study/start", payload).then((r) => {
@@ -438,12 +456,17 @@
   }
   function handleFinish() {
     const isResult = CONFIG.resultUrlPattern.test(location.href) || /(\d+)\s*ポイント/.test(document.body.innerText || "");
-    if (!isResult) return;
+    if (!isResult) {
+      lastFinishSig = "";
+      return;
+    }
     const data = extractResult();
     if (!data.score) return;
     const sig = `${data.studentId}|${data.title}|${data.score}|${data.date}`;
     if (sig === lastFinishSig) return;
     lastFinishSig = sig;
+    data.eventId = newEventId();
+    data.seq = nextSeq();
     log("\u7D50\u679C\u3092\u9001\u4FE1", data);
     post("/api/study/finish", data).then((r) => {
       var _a, _b;

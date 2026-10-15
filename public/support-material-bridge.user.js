@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         支援教材 学習記録ブリッジ
 // @namespace    support-material-manager
-// @version      1.7.0
+// @version      1.8.0
 // @description  brain-program の学習開始・結果を支援教材管理アプリへ自動送信します（拡張機能版と同じ動き）。
 // @author       支援教材管理アプリ
 // @match        *://*/*
@@ -40,7 +40,7 @@
 
   // ここと @version は必ず揃える。Tampermonkey は @version を見て自動更新するため、
   // 揃っていないと「画面には新しい番号が出るのに更新が配られない」状態になる。
-  const VERSION = "1.7.0";
+  const VERSION = "1.8.0";
 
   // ---- 動作確認モード ----
   // URLの末尾に #smmtest を付けて開くと、どのサイトでも青い帯を出す。
@@ -606,11 +606,44 @@
     };
   }
 
+  // 同じ画面を何度も送らないための「直前に送った内容」。
+  // ★ これは画面を離れたら必ず捨てること。
+  //   捨てないと「直前と同じ教材・同じ点数」の回が送信されず、まるごと欠ける。
+  //   実際、8問やったのに7問しか残らない生徒が出た（点数がたまたま揃ったため）。
   let lastStartSig = "";
   let lastFinishSig = "";
 
+  /** 1回の検知ごとに固有の番号。送り直しでは同じ番号、別の回では別の番号になる。 */
+  function newEventId() {
+    return (
+      Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8)
+    );
+  }
+
+  /**
+   * その日の通し番号。診断用で、重複判定には使わない。
+   * 「7件届いているが番号が1〜7」なら検知自体が7回、
+   * 「1,2,3,5,6,7,8」なら4回目が送信で失われた、と切り分けられる。
+   */
+  function nextSeq() {
+    const d = new Date();
+    const key =
+      "smm-seq-" + d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+    let n = 0;
+    try {
+      n = parseInt(GM_getValue(key, "0"), 10) || 0;
+      GM_setValue(key, String(n + 1));
+    } catch {
+      /* 保存できない環境では 0 のまま */
+    }
+    return n + 1;
+  }
+
   function handleStart() {
-    if (!CONFIG.startUrlPattern.test(location.href)) return;
+    if (!CONFIG.startUrlPattern.test(location.href)) {
+      lastStartSig = ""; // 問題画面を離れたら記憶を捨てる（上と同じ理由）
+      return;
+    }
     const params = getParams();
     if (!params.studentId) return;
     const title = params.categoryId
@@ -625,6 +658,7 @@
       roomId: params.roomId,
       title,
       startTime: new Date().toISOString(),
+      eventId: newEventId(),
     };
     log("開始を送信", payload);
     post("/api/study/start", payload).then((r) => {
@@ -639,13 +673,24 @@
     const isResult =
       CONFIG.resultUrlPattern.test(location.href) ||
       /(\d+)\s*ポイント/.test(document.body.innerText || "");
-    if (!isResult) return;
+    // 結果画面を離れたら記憶を捨てる。
+    // 次に戻ってきた回は、内容が前回と同じでも別の回として送る。
+    if (!isResult) {
+      lastFinishSig = "";
+      return;
+    }
 
     const data = extractResult();
     if (!data.score) return; // 得点がまだ描画されていない
     const sig = `${data.studentId}|${data.title}|${data.score}|${data.date}`;
     if (sig === lastFinishSig) return;
     lastFinishSig = sig;
+
+    // 1回の検知ごとに固有の番号を付ける。
+    // 送信に失敗して送り直すときは同じ番号のままなので重複せず、
+    // 本当にもう一度やった回は別の番号になるので潰れない。
+    data.eventId = newEventId();
+    data.seq = nextSeq();
 
     log("結果を送信", data);
     post("/api/study/finish", data).then((r) => {

@@ -17,7 +17,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "1.4.0";
+  const VERSION = "1.5.0";
 
   // 二重に押されても、監視を二重に仕掛けない
   if (window.__smmBridge) {
@@ -337,11 +337,21 @@
     };
   }
 
+  // 同じ画面を何度も送らないための「直前に送った内容」。
+  // ★ 画面を離れたら必ず捨てること。捨てないと「直前と同じ教材・同じ点数」の回が
+  //   送信されず、まるごと欠ける（8問やったのに7問しか残らない）。
   let lastStartSig = "";
   let lastFinishSig = "";
+  // 1回の検知ごとに固有の番号。送り直しでは同じ番号、別の回では別の番号になる。
+  function newEventId() {
+    return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+  }
 
   function handleStart() {
-    if (!CONFIG.startUrlPattern.test(location.href)) return;
+    if (!CONFIG.startUrlPattern.test(location.href)) {
+      lastStartSig = ""; // 画面を離れたら記憶を捨てる
+      return;
+    }
     const params = getParams();
     if (!params.studentId) return;
     const title = params.categoryId
@@ -356,6 +366,7 @@
       roomId: params.roomId,
       title,
       startTime: new Date().toISOString(),
+      eventId: newEventId(),
     };
     log("開始を送信", payload);
     post("/api/study/start", payload).then((r) => {
@@ -367,13 +378,17 @@
     const isResult =
       CONFIG.resultUrlPattern.test(location.href) ||
       /(\d+)\s*ポイント/.test(document.body.innerText || "");
-    if (!isResult) return;
+    if (!isResult) {
+      lastFinishSig = ""; // 画面を離れたら記憶を捨てる。次に戻った回は別の回として送る
+      return;
+    }
 
     const data = extractResult();
     if (!data.score) return; // 得点がまだ描画されていない
     const sig = `${data.studentId}|${data.title}|${data.score}|${data.date}`;
     if (sig === lastFinishSig) return;
     lastFinishSig = sig;
+    data.eventId = newEventId();
 
     log("結果を送信", data);
     post("/api/study/finish", data).then((r) => {

@@ -52,9 +52,13 @@ export async function POST(req: Request) {
 
   const title = strOrNull(body.title);
 
-  // 開始イベントには点数が無く、送り直しと2回目を見分ける手がかりが無い。
-  // 一覧には使わない（診断用）ので、1日1件にまとめておく。
-  const id = dedupeDocId("start", [studentId, title, todayKey()]);
+  // 結果と同じく、ブリッジが付けた eventId があればそれで判定する。
+  // 無い場合（古いブリッジ）は、開始には点数が無く送り直しと2回目を見分けられないので、
+  // 診断用と割り切って1日1件にまとめる。
+  const eventId = strOrNull(body.eventId);
+  const id = eventId
+    ? dedupeDocId("start", [studentId, eventId])
+    : dedupeDocId("start", [studentId, title, todayKey()]);
 
   await db.collection("studyEvents").doc(id).set(
     {
@@ -64,6 +68,7 @@ export async function POST(req: Request) {
       title,
       roomId: strOrNull(body.roomId),
       startTime: strOrNull(body.startTime),
+      eventId, // 1回の検知ごとの固有番号
       receivedAt: FieldValue.serverTimestamp(),
     },
     { merge: true }

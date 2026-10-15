@@ -57,18 +57,27 @@ export async function POST(req: Request) {
   const cumulative = numOrNull(body.cumulative);
   const studyDate = strOrNull(body.date);
 
-  // 同じ内容が複数のブリッジから届いても1件にまとめる（IDを内容から決める）。
-  // 累計点・平均点・最高点まで含めるのが肝。これらはやり直すと必ず変わるので、
-  // 「送り直し」と「本当にもう一度やった」を取り違えずに済む。
-  const id = dedupeDocId("finish", [
-    studentId,
-    title,
-    score,
-    cumulative,
-    average,
-    max,
-    studyDate,
-  ]);
+  // 重複をまとめるためのID。
+  //
+  // ブリッジが1回の検知ごとに付ける eventId があれば、それを使う。
+  // 送信に失敗して送り直したときは同じ eventId なので1件にまとまり、
+  // 本当にもう一度やった回は別の eventId なので別件として残る。
+  //
+  // 内容だけで判定していたときは、同じ教材で同じ点数が出た回が
+  // 1件に潰れて「8問やったのに7問」になっていた。
+  // eventId を送らない古いブリッジのために、内容での判定も残してある。
+  const eventId = strOrNull(body.eventId);
+  const id = eventId
+    ? dedupeDocId("finish", [studentId, eventId])
+    : dedupeDocId("finish", [
+        studentId,
+        title,
+        score,
+        cumulative,
+        average,
+        max,
+        studyDate,
+      ]);
 
   await db.collection("studyEvents").doc(id).set(
     {
@@ -82,6 +91,8 @@ export async function POST(req: Request) {
       cumulative,
       studyDate, // 実施日（サイト表記そのまま）
       roomId: strOrNull(body.roomId),
+      eventId, // 1回の検知ごとの固有番号
+      seq: numOrNull(body.seq), // その端末のその日の通し番号（診断用）
       receivedAt: FieldValue.serverTimestamp(),
     },
     { merge: true }

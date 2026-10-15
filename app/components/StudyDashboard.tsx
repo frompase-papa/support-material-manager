@@ -26,6 +26,10 @@ interface StudyEvent {
   cumulative: number | null;
   studyDate: string | null;
   receivedAt: Date | null;
+  /** ブリッジが1回の検知ごとに付ける固有番号。重複判定に使う。 */
+  eventId: string | null;
+  /** その端末のその日の通し番号。欠けていれば送信で失われた回がある（診断用）。 */
+  seq: number | null;
 }
 
 function startOfToday(): Date {
@@ -85,6 +89,8 @@ export function StudyDashboard() {
               max: d.max ?? null,
               cumulative: d.cumulative ?? null,
               studyDate: d.studyDate ?? null,
+              eventId: d.eventId ?? null,
+              seq: d.seq ?? null,
               receivedAt:
                 d.receivedAt && typeof d.receivedAt.toDate === "function"
                   ? d.receivedAt.toDate()
@@ -112,19 +118,21 @@ export function StudyDashboard() {
     const list = events.filter((e) => e.type === "finish" && isRealStudent(e));
     const seen = new Set<string>();
     return list.filter((e) => {
-      // 累計点・平均点・最高点まで含めて比べる。
-      // ここを「生徒・教材・点数」だけで比べ、さらに時間で区切っていたため、
-      // 同じ点数が出た2回目を重複と誤判定して隠していた（8回が7回に見えた）。
-      // やり直せば累計点は必ず変わるので、完全に一致する行だけをまとめる。
-      const key = [
-        nameOf(e),
-        e.title ?? "",
-        e.score ?? "",
-        e.cumulative ?? "",
-        e.average ?? "",
-        e.max ?? "",
-        e.studyDate ?? "",
-      ].join("|");
+      // ブリッジが付けた固有番号があれば、それだけで判定する。
+      // 内容で比べると「同じ教材・同じ点数の2回目」を重複と誤判定して隠してしまい、
+      // 8問やったのに7問に見えることがあった。
+      // 固有番号が無い古い記録のためだけに、内容での比較を残してある。
+      const key = e.eventId
+        ? "id:" + e.eventId
+        : [
+            nameOf(e),
+            e.title ?? "",
+            e.score ?? "",
+            e.cumulative ?? "",
+            e.average ?? "",
+            e.max ?? "",
+            e.studyDate ?? "",
+          ].join("|");
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -290,14 +298,20 @@ export function StudyDashboard() {
         {showRaw && (
           <div className="mt-3">
             <p className="mb-2 text-xs text-zinc-500 dark:text-zinc-400">
-              拡張機能から届いた“生”のデータです。ここに出ていれば「届いている」、
-              空なら「そもそも届いていない（拡張未導入・送信エラー等）」の切り分けができます。
+              ブリッジから届いた“生”のデータです。ここに出ていれば「届いている」、
+              空なら「そもそも届いていない」の切り分けができます。
+              <br />
+              <strong>No.</strong> は端末がその日に検知した通し番号です。
+              たとえば 8問やったのに 1〜7 までしか無ければ<strong>検知が7回だった</strong>、
+              1,2,3,5,6,7,8 のように抜けていれば<strong>送信の途中で失われた</strong>と分かります。
             </p>
             <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
               <table className="w-full min-w-[680px] border-collapse text-xs">
                 <thead className="bg-zinc-50 text-left text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
                   <tr>
                     <th className="px-3 py-2 font-medium">受信</th>
+                    {/* 端末のその日の通し番号。抜けていれば送信で失われた回がある */}
+                    <th className="px-3 py-2 text-right font-medium">No.</th>
                     <th className="px-3 py-2 font-medium">種別</th>
                     <th className="px-3 py-2 font-medium">生徒ID</th>
                     <th className="px-3 py-2 font-medium">生徒名</th>
@@ -309,7 +323,7 @@ export function StudyDashboard() {
                   {events.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={7}
                         className="px-3 py-4 text-center text-zinc-400"
                       >
                         本日届いたデータはありません
@@ -323,6 +337,9 @@ export function StudyDashboard() {
                       >
                         <td className="whitespace-nowrap px-3 py-1.5 text-zinc-500">
                           {fmtDateTime(e.receivedAt)}
+                        </td>
+                        <td className="px-3 py-1.5 text-right text-zinc-500">
+                          {e.seq ?? "—"}
                         </td>
                         <td className="px-3 py-1.5">{e.type}</td>
                         <td className="px-3 py-1.5 text-zinc-500">
