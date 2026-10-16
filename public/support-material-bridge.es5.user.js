@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         支援教材 学習記録ブリッジ（旧ブラウザ対応版）
 // @namespace    support-material-manager
-// @version      1.8.0
+// @version      1.9.0
 // @description  brain-program の学習開始・結果を支援教材管理アプリへ自動送信します（拡張機能版と同じ動き）。
 // @author       支援教材管理アプリ
 // @match        *://*/*
@@ -19,7 +19,22 @@
 "use strict";
 (function() {
   "use strict";
-  const VERSION = "1.8.0";
+  const VERSION = "1.9.0";
+  function suppressLongPressMenu() {
+    const isEditable = (t) => {
+      if (!t || !t.tagName) return false;
+      const tag = String(t.tagName).toUpperCase();
+      return tag === "INPUT" || tag === "TEXTAREA" || t.isContentEditable;
+    };
+    const block = (e) => {
+      if (!isEditable(e.target)) e.preventDefault();
+    };
+    document.addEventListener("contextmenu", block, true);
+    document.addEventListener("selectstart", block, true);
+    const style = document.createElement("style");
+    style.textContent = "body,body *{-webkit-touch-callout:none!important;}input,textarea,[contenteditable]{-webkit-touch-callout:default!important;-webkit-user-select:text!important;user-select:text!important;}";
+    (document.head || document.documentElement).appendChild(style);
+  }
   const DIAG = /smmtest/i.test(location.hash);
   const IS_TARGET = /brain-program/i.test(location.hostname);
   if (!IS_TARGET && !DIAG) return;
@@ -226,7 +241,7 @@
     if (!el) {
       el = document.createElement("div");
       el.id = "smm-rec-indicator";
-      el.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:2147483647;background:rgba(16,185,129,.95);color:#fff;font:700 14px/2.2 sans-serif;text-align:center;box-shadow:0 1px 6px rgba(0,0,0,.35);pointer-events:none;user-select:none;";
+      el.style.cssText = "position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:2147483647;background:rgba(16,185,129,.95);color:#fff;font:700 12px/1.9 sans-serif;padding:0 12px;border-radius:0 0 10px 10px;max-width:56vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 6px rgba(0,0,0,.35);pointer-events:none;user-select:none;";
       el.textContent = "\u{1F4E1} \u8A18\u9332\u4E2D v" + VERSION;
     }
     if (el.parentElement !== root) root.appendChild(el);
@@ -508,6 +523,7 @@
   });
   mo.observe(document.documentElement, { childList: true, subtree: true });
   paintIndicator();
+  suppressLongPressMenu();
   let noticeShown = false;
   function notifyUnconfigured() {
     if (noticeShown || apiKey) return;

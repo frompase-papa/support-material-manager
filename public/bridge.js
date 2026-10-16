@@ -17,7 +17,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "1.5.0";
+  const VERSION = "1.6.0";
 
   // 二重に押されても、監視を二重に仕掛けない
   if (window.__smmBridge) {
@@ -115,6 +115,31 @@
     );
   }
 
+/**
+   * 長押しで出るメニュー・文字選択を止める。
+   * 「連れてって」などの長押し操作のとき、ブラウザの長押しメニューや
+   * Tampermonkey の項目が出てサイト側の操作を邪魔するため。
+   * 入力欄では止めない（キーの入力ができなくなる）。
+   */
+  function suppressLongPressMenu() {
+    var isEditable = function (t) {
+      if (!t || !t.tagName) return false;
+      var tag = String(t.tagName).toUpperCase();
+      return tag === "INPUT" || tag === "TEXTAREA" || t.isContentEditable;
+    };
+    var block = function (e) {
+      if (!isEditable(e.target)) e.preventDefault();
+    };
+    document.addEventListener("contextmenu", block, true);
+    document.addEventListener("selectstart", block, true);
+    var style = document.createElement("style");
+    style.textContent =
+      "body,body *{-webkit-touch-callout:none!important;}" +
+      "input,textarea,[contenteditable]{-webkit-touch-callout:default!important;" +
+      "-webkit-user-select:text!important;user-select:text!important;}";
+    (document.head || document.documentElement).appendChild(style);
+  }
+
   function ensureIndicator() {
     const root = uiRoot();
     if (!root) return null;
@@ -123,10 +148,17 @@
       el = document.createElement("div");
       el.id = "smm-rec-indicator";
       // 右下だとサイト側のボタンに隠れることがあるため、上部の帯にする
+      // ★ 画面の四隅は絶対に覆わないこと。
+      //   brain-program の強制終了は「左上・右上・左下・右下を押す」操作で、
+      //   四隅に出していると押せなくなる。上部中央だけに小さく出す。
       el.style.cssText =
-        "position:fixed;top:0;left:0;right:0;z-index:2147483647;" +
-        "color:#fff;font:700 14px/2.2 sans-serif;text-align:center;" +
-        "box-shadow:0 1px 6px rgba(0,0,0,.35);pointer-events:none;user-select:none;";
+        "position:fixed;top:0;left:50%;transform:translateX(-50%);" +
+        "z-index:2147483647;background:rgba(16,185,129,.95);color:#fff;" +
+        "font:700 12px/1.9 sans-serif;padding:0 12px;" +
+        "border-radius:0 0 10px 10px;max-width:56vw;white-space:nowrap;" +
+        "overflow:hidden;text-overflow:ellipsis;" +
+        "box-shadow:0 1px 6px rgba(0,0,0,.35);" +
+        "pointer-events:none;user-select:none;";
     }
     // 全画面の出入りで置き場所が変わるので、毎回いまの置き場所へ付け替える
     if (el.parentElement !== root) root.appendChild(el);
@@ -441,6 +473,7 @@
 
   // 押した直後に「動き始めた」ことを知らせる
   try {
+    suppressLongPressMenu();
     ensureIndicator();
     showPopup();
     setTimeout(handleAll, 500);

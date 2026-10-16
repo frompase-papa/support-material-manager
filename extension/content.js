@@ -38,6 +38,31 @@ function log(...a) {
 }
 
 // 画面すみの「記録中」表示（拡張が動いているか一目で分かるように）
+/**
+ * 長押しで出るメニュー・文字選択を止める。
+ * 「連れてって」などの長押し操作のとき、ブラウザの長押しメニューや
+ * Tampermonkey の項目が出てサイト側の操作を邪魔するため。
+ * 入力欄では止めない（キーの入力ができなくなる）。
+ */
+function suppressLongPressMenu() {
+  var isEditable = function (t) {
+    if (!t || !t.tagName) return false;
+    var tag = String(t.tagName).toUpperCase();
+    return tag === "INPUT" || tag === "TEXTAREA" || t.isContentEditable;
+  };
+  var block = function (e) {
+    if (!isEditable(e.target)) e.preventDefault();
+  };
+  document.addEventListener("contextmenu", block, true);
+  document.addEventListener("selectstart", block, true);
+  var style = document.createElement("style");
+  style.textContent =
+    "body,body *{-webkit-touch-callout:none!important;}" +
+    "input,textarea,[contenteditable]{-webkit-touch-callout:default!important;" +
+    "-webkit-user-select:text!important;user-select:text!important;}";
+  (document.head || document.documentElement).appendChild(style);
+}
+
 function ensureIndicator() {
   if (!SMM_ACTIVE) return null; // 他のブリッジが動いているときは帯も出さない
   if (!document.body) return null;
@@ -45,11 +70,17 @@ function ensureIndicator() {
   if (!el) {
     el = document.createElement("div");
     el.id = "smm-rec-indicator";
+      // ★ 画面の四隅は絶対に覆わないこと。
+      //   brain-program の強制終了は「左上・右上・左下・右下を押す」操作で、
+      //   四隅に出していると押せなくなる。上部中央だけに小さく出す。
     el.style.cssText =
-      "position:fixed;bottom:8px;right:8px;z-index:2147483647;" +
-      "background:rgba(16,185,129,.92);color:#fff;font:600 12px/1.4 sans-serif;" +
-      "padding:4px 10px;border-radius:9999px;box-shadow:0 1px 4px rgba(0,0,0,.3);" +
-      "pointer-events:none;user-select:none;";
+      "position:fixed;top:0;left:50%;transform:translateX(-50%);" +
+        "z-index:2147483647;background:rgba(16,185,129,.95);color:#fff;" +
+        "font:700 12px/1.9 sans-serif;padding:0 12px;" +
+        "border-radius:0 0 10px 10px;max-width:56vw;white-space:nowrap;" +
+        "overflow:hidden;text-overflow:ellipsis;" +
+        "box-shadow:0 1px 6px rgba(0,0,0,.35);" +
+        "pointer-events:none;user-select:none;";
     el.textContent = "📡 記録中";
     document.body.appendChild(el);
   }
@@ -361,6 +392,7 @@ mo.observe(document.documentElement, { childList: true, subtree: true });
 
 // 初回。他のブリッジが先に動いていたら、画面にも通信にも一切触らない。
 if (SMM_ACTIVE) {
+  suppressLongPressMenu();
   paintIndicator();
   pollStatus();
   // 未送信件数の確認と再送のきっかけ（Service Worker が寝ていても起こせる）

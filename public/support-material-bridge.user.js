@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         支援教材 学習記録ブリッジ
 // @namespace    support-material-manager
-// @version      1.8.0
+// @version      1.9.0
 // @description  brain-program の学習開始・結果を支援教材管理アプリへ自動送信します（拡張機能版と同じ動き）。
 // @author       支援教材管理アプリ
 // @match        *://*/*
@@ -40,7 +40,34 @@
 
   // ここと @version は必ず揃える。Tampermonkey は @version を見て自動更新するため、
   // 揃っていないと「画面には新しい番号が出るのに更新が配られない」状態になる。
-  const VERSION = "1.8.0";
+  const VERSION = "1.9.0";
+
+  /**
+   * 長押しで出るメニュー・文字選択を止める。
+   *
+   * タブレットで「連れてって」などの長押し操作をすると、ブラウザの長押しメニューや
+   * Tampermonkey の項目が出てしまい、サイト側の操作が成立しないことがある。
+   * brain-program のページでだけ止める。入力欄では止めない（キーの入力ができなくなるため）。
+   */
+  function suppressLongPressMenu() {
+    const isEditable = (t) => {
+      if (!t || !t.tagName) return false;
+      const tag = String(t.tagName).toUpperCase();
+      return tag === "INPUT" || tag === "TEXTAREA" || t.isContentEditable;
+    };
+    const block = (e) => {
+      if (!isEditable(e.target)) e.preventDefault();
+    };
+    document.addEventListener("contextmenu", block, true);
+    document.addEventListener("selectstart", block, true);
+    // Android の長押しで出る吹き出し（コピー等）も抑える
+    const style = document.createElement("style");
+    style.textContent =
+      "body,body *{-webkit-touch-callout:none!important;}" +
+      "input,textarea,[contenteditable]{-webkit-touch-callout:default!important;" +
+      "-webkit-user-select:text!important;user-select:text!important;}";
+    (document.head || document.documentElement).appendChild(style);
+  }
 
   // ---- 動作確認モード ----
   // URLの末尾に #smmtest を付けて開くと、どのサイトでも青い帯を出す。
@@ -334,12 +361,18 @@
     if (!el) {
       el = document.createElement("div");
       el.id = "smm-rec-indicator";
-      // 画面上部の帯にする。右下だと、サイト側のボタンやナビに隠れて
-      // 「動いていない」のか「見えていないだけ」なのか分からなかったため
+      // ★ 画面の四隅は絶対に覆わないこと。
+      //   brain-program の強制終了は「左上・右上・左下・右下を押す」操作で、
+      //   横幅いっぱいの帯にしていたら上の2つが押せなくなった。
+      //   そのため上部中央だけに小さく出す。幅も内容ぶんに留める。
+      //   右下・左下も、サイト側のボタンと重なるので使わない。
       el.style.cssText =
-        "position:fixed;top:0;left:0;right:0;z-index:2147483647;" +
-        "background:rgba(16,185,129,.95);color:#fff;font:700 14px/2.2 sans-serif;" +
-        "text-align:center;box-shadow:0 1px 6px rgba(0,0,0,.35);" +
+        "position:fixed;top:0;left:50%;transform:translateX(-50%);" +
+        "z-index:2147483647;background:rgba(16,185,129,.95);color:#fff;" +
+        "font:700 12px/1.9 sans-serif;padding:0 12px;" +
+        "border-radius:0 0 10px 10px;max-width:56vw;white-space:nowrap;" +
+        "overflow:hidden;text-overflow:ellipsis;" +
+        "box-shadow:0 1px 6px rgba(0,0,0,.35);" +
         "pointer-events:none;user-select:none;";
       el.textContent = "📡 記録中 v" + VERSION;
     }
@@ -743,6 +776,7 @@
 
   // 帯はこの後 700ms ごとにも描き直すが、待たずにすぐ出す
   paintIndicator();
+  suppressLongPressMenu();
 
   // キーが未設定のうちは、1回だけブラウザ標準のダイアログでも知らせる。
   // 全画面表示中はページ内に描いたものが一切見えないため、動いているのに

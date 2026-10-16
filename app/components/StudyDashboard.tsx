@@ -13,6 +13,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/app/lib/firebase";
 import { useAuth } from "@/app/components/AuthProvider";
+import { useAttendanceStore } from "@/app/hooks/useAttendanceStore";
 
 interface StudyEvent {
   id: string;
@@ -59,8 +60,18 @@ function isRealStudent(e: StudyEvent): boolean {
   return n !== "" && !/^\d+$/.test(n);
 }
 
+/**
+ * 名前を突き合わせるための正規化。
+ * HUGの名簿は「酒井 桃馬」、brain-program は「酒井桃馬」のように
+ * 空白の有無が違うので、空白を取り除いてから比べる。
+ */
+function normalizeName(s: string): string {
+  return s.replace(/[\s　]/g, "");
+}
+
 export function StudyDashboard() {
   const { user, signOut } = useAuth();
+  const store = useAttendanceStore();
   const [events, setEvents] = useState<StudyEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
@@ -163,6 +174,25 @@ export function StudyDashboard() {
   }, [realFinishes]);
 
   // 除外された件数（生徒名が取れなかった＝番号などの記録）
+  /**
+   * 本日「タブレット」の予定になっている生徒と、実際の記録を突き合わせる。
+   *
+   * タブレットの生徒は brain-program をやるので、記録が無ければ
+   * 「やっていない」か「記録が取れていない」のどちらかで、どちらも見逃せない。
+   * 一日の終わりに気づくのでは遅いので、画面の一番上に出す。
+   */
+  const tabletCheck = useMemo(() => {
+    const planned = store
+      .getForDate(startOfToday())
+      .filter((item) => item.material === "tablet")
+      .map((item) => item.student.name);
+
+    const recorded = new Set(realFinishes.map((e) => normalizeName(nameOf(e))));
+    const missing = planned.filter((n) => !recorded.has(normalizeName(n)));
+
+    return { planned, missing, done: planned.length - missing.length };
+  }, [store, realFinishes]);
+
   const excludedCount = useMemo(
     () => events.filter((e) => e.type === "finish" && !isRealStudent(e)).length,
     [events]
@@ -249,6 +279,49 @@ export function StudyDashboard() {
           </div>
         </div>
       </header>
+
+      {/* 本日タブレット予定の生徒と、実際の記録の突き合わせ */}
+      {store.hydrated && tabletCheck.planned.length > 0 && (
+        <div
+          className={`mb-6 rounded-xl border p-4 ${
+            tabletCheck.missing.length > 0
+              ? "border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/30"
+              : "border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30"
+          }`}
+        >
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className="text-sm font-bold">
+              {tabletCheck.missing.length > 0
+                ? "⚠ 記録が無い生徒がいます"
+                : "✅ タブレット予定の全員に記録があります"}
+            </span>
+            <span className="text-xs text-zinc-600 dark:text-zinc-300">
+              本日のタブレット予定 {tabletCheck.planned.length}名 ／ 記録あり{" "}
+              {tabletCheck.done}名 ／ 記録なし {tabletCheck.missing.length}名
+            </span>
+          </div>
+
+          {tabletCheck.missing.length > 0 && (
+            <>
+              <ul className="mt-2 flex flex-wrap gap-2">
+                {tabletCheck.missing.map((name) => (
+                  <li
+                    key={name}
+                    className="rounded-full bg-red-600 px-3 py-1 text-sm font-bold text-white"
+                  >
+                    {name}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-red-800 dark:text-red-300">
+                「実施していない」か「記録が取れていない」のどちらかです。
+                本人がやったはずであれば、そのタブレットの画面上部に
+                <strong>📡 記録中</strong> が出ているか確認してください。
+              </p>
+            </>
+          )}
+        </div>
+      )}
 
       {/* サマリー */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
