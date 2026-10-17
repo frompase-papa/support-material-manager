@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         支援教材 学習記録ブリッジ（旧ブラウザ対応版）
 // @namespace    support-material-manager
-// @version      1.9.0
+// @version      2.0.0
 // @description  brain-program の学習開始・結果を支援教材管理アプリへ自動送信します（拡張機能版と同じ動き）。
 // @author       支援教材管理アプリ
 // @match        *://*/*
@@ -19,7 +19,7 @@
 "use strict";
 (function() {
   "use strict";
-  const VERSION = "1.9.0";
+  const VERSION = "2.0.0";
   function suppressLongPressMenu() {
     const isEditable = (t) => {
       if (!t || !t.tagName) return false;
@@ -34,6 +34,71 @@
     const style = document.createElement("style");
     style.textContent = "body,body *{-webkit-touch-callout:none!important;}input,textarea,[contenteditable]{-webkit-touch-callout:default!important;-webkit-user-select:text!important;user-select:text!important;}";
     (document.head || document.documentElement).appendChild(style);
+  }
+  const KIOSK_STORE = "smm-kiosk";
+  const ALLOW_HOST = /brain-program|support-material-manager\.vercel\.app/i;
+  function kioskOn() {
+    try {
+      return GM_getValue(KIOSK_STORE, "0") === "1";
+    } catch (e) {
+      return false;
+    }
+  }
+  try {
+    GM_registerMenuCommand(
+      (kioskOn() ? "\u25A0 " : "\u25A1 ") + "\u5B66\u7FD2\u5C02\u7528\u30E2\u30FC\u30C9\uFF08\u4ED6\u30B5\u30A4\u30C8\u3092\u958B\u304B\u305B\u306A\u3044\uFF09",
+      () => {
+        const next = !kioskOn();
+        try {
+          GM_setValue(KIOSK_STORE, next ? "1" : "0");
+        } catch (e) {
+        }
+        alert("\u5B66\u7FD2\u5C02\u7528\u30E2\u30FC\u30C9\u3092 " + (next ? "ON" : "OFF") + " \u306B\u3057\u307E\u3057\u305F\u3002");
+        location.reload();
+      }
+    );
+  } catch (e) {
+  }
+  function showBlockedScreen() {
+    const draw = () => {
+      const root = document.body || document.documentElement;
+      if (!root) return setTimeout(draw, 200);
+      if (document.getElementById("smm-blocked")) return;
+      try {
+        window.stop();
+      } catch (e) {
+      }
+      const o = document.createElement("div");
+      o.id = "smm-blocked";
+      o.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:#0f172a;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:24px;text-align:center;font:400 18px/1.7 sans-serif;";
+      const t = document.createElement("div");
+      t.textContent = "\u3053\u306E\u30BF\u30D6\u30EC\u30C3\u30C8\u306F\u5B66\u7FD2\u5C02\u7528\u3067\u3059";
+      t.style.cssText = "font-size:26px;font-weight:700;";
+      const m = document.createElement("div");
+      m.textContent = "\u3053\u306E\u30DA\u30FC\u30B8\u306F\u958B\u3051\u307E\u305B\u3093\u3002\u4E0B\u306E\u30DC\u30BF\u30F3\u304B\u3089\u5B66\u7FD2\u306B\u623B\u3063\u3066\u304F\u3060\u3055\u3044\u3002";
+      m.style.cssText = "font-size:17px;color:#cbd5e1;";
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = "\u5B66\u7FD2\u306B\u623B\u308B";
+      b.style.cssText = "padding:16px 28px;border:0;border-radius:14px;cursor:pointer;background:#059669;color:#fff;font-size:20px;font-weight:700;";
+      b.addEventListener("click", () => {
+        location.href = "https://www.brain-program-001.com:3000/";
+      });
+      const note = document.createElement("div");
+      note.textContent = "\u8077\u54E1\u306E\u65B9\u3078\uFF1A\u89E3\u9664\u306F Tampermonkey \u306E\u30E1\u30CB\u30E5\u30FC \u2192\u300C\u5B66\u7FD2\u5C02\u7528\u30E2\u30FC\u30C9\u300D\u304B\u3089\u884C\u3048\u307E\u3059\u3002";
+      note.style.cssText = "font-size:12px;color:#64748b;margin-top:8px;";
+      o.appendChild(t);
+      o.appendChild(m);
+      o.appendChild(b);
+      o.appendChild(note);
+      root.appendChild(o);
+    };
+    draw();
+    setInterval(draw, 700);
+  }
+  if (kioskOn() && !ALLOW_HOST.test(location.hostname)) {
+    showBlockedScreen();
+    return;
   }
   const DIAG = /smmtest/i.test(location.hash);
   const IS_TARGET = /brain-program/i.test(location.hostname);

@@ -149,5 +149,54 @@ const check = (n, ok, x = "") => out.push(`${ok ? "PASS" : "**FAIL**"}  ${n}${x 
   );
 }
 
+// 9) 学習専用モード：ONなら許可サイト以外を塞ぐ
+{
+  const r = run({
+    hostname: "www.youtube.com",
+    hash: "",
+    gmStore: { "smm-kiosk": "1" },
+  });
+  const blocked = !!r.byId.get("smm-blocked");
+  check(
+    "学習専用ONなら他サイトを塞ぐ",
+    !r.error && blocked,
+    r.error ? String(r.error.message) : blocked ? "" : "塞いでいない"
+  );
+}
+
+// 10) 学習専用ONでも brain-program は今まで通り動く
+{
+  const r = run({
+    hostname: "www.brain-program-001.com",
+    hash: "",
+    gmStore: { "smm-kiosk": "1", "smm-api-key": "k" },
+  });
+  check(
+    "学習専用ONでも brain-program は通して記録する",
+    !r.byId.get("smm-blocked") && !!r.byId.get("smm-rec-indicator"),
+    r.byId.get("smm-blocked") ? "塞いでしまっている" : ""
+  );
+}
+
+// 11) 支援アプリ自身も通す（職員が /study を見られるように）
+{
+  const r = run({
+    hostname: "support-material-manager.vercel.app",
+    hash: "",
+    gmStore: { "smm-kiosk": "1" },
+  });
+  check("学習専用ONでも支援アプリは通す", !r.byId.get("smm-blocked"));
+}
+
+// 12) 既定はOFF。勝手に塞がない
+{
+  const r = run({ hostname: "www.youtube.com", hash: "" });
+  check(
+    "既定（OFF）では何も塞がない",
+    !r.byId.get("smm-blocked") && r.byId.size === 0,
+    `要素数=${r.byId.size}`
+  );
+}
+
 console.log(out.join("\n"));
 console.log(out.some((x) => x.includes("FAIL")) ? "\n=== 失敗あり ===" : "\n=== すべて成功 ===");

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         支援教材 学習記録ブリッジ
 // @namespace    support-material-manager
-// @version      1.9.0
+// @version      2.0.0
 // @description  brain-program の学習開始・結果を支援教材管理アプリへ自動送信します（拡張機能版と同じ動き）。
 // @author       支援教材管理アプリ
 // @match        *://*/*
@@ -40,7 +40,7 @@
 
   // ここと @version は必ず揃える。Tampermonkey は @version を見て自動更新するため、
   // 揃っていないと「画面には新しい番号が出るのに更新が配られない」状態になる。
-  const VERSION = "1.9.0";
+  const VERSION = "2.0.0";
 
   /**
    * 長押しで出るメニュー・文字選択を止める。
@@ -67,6 +67,105 @@
       "input,textarea,[contenteditable]{-webkit-touch-callout:default!important;" +
       "-webkit-user-select:text!important;user-select:text!important;}";
     (document.head || document.documentElement).appendChild(style);
+  }
+
+  // ---- 学習専用モード（キオスク） ----
+  //
+  // タブレットは brain-program 専用機として使う。ところがアプリ固定では
+  // 「Mises から出られない」までしか守れず、ブラウザの中では YouTube でも
+  // どこでも開けてしまう。そこでスクリプト側で、許可したサイト以外を塞ぐ。
+  //
+  // 切り替えは Tampermonkey のメニューから。生徒はそこまで辿り着かないが、
+  // 職員は解除できる。既定はOFF（勝手に塞がない）。
+  const KIOSK_STORE = "smm-kiosk";
+  const ALLOW_HOST = /brain-program|support-material-manager\.vercel\.app/i;
+
+  function kioskOn() {
+    try {
+      return GM_getValue(KIOSK_STORE, "0") === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  // メニューは「塞がれた画面」からも使えないと解除できないので、
+  // 対象サイトの判定より前に登録しておく。
+  try {
+    GM_registerMenuCommand(
+      (kioskOn() ? "■ " : "□ ") + "学習専用モード（他サイトを開かせない）",
+      () => {
+        const next = !kioskOn();
+        try {
+          GM_setValue(KIOSK_STORE, next ? "1" : "0");
+        } catch {
+          /* 保存できない環境では切り替えられない */
+        }
+        alert("学習専用モードを " + (next ? "ON" : "OFF") + " にしました。");
+        location.reload();
+      }
+    );
+  } catch {
+    /* メニューに登録できない環境では何もしない */
+  }
+
+  /** 許可していないサイトを、画面ごと覆って使えなくする */
+  function showBlockedScreen() {
+    const draw = () => {
+      const root = document.body || document.documentElement;
+      if (!root) return setTimeout(draw, 200);
+      if (document.getElementById("smm-blocked")) return;
+
+      try {
+        window.stop();
+      } catch {
+        /* 読み込みを止められなくても覆えば十分 */
+      }
+
+      const o = document.createElement("div");
+      o.id = "smm-blocked";
+      o.style.cssText =
+        "position:fixed;inset:0;z-index:2147483647;background:#0f172a;" +
+        "color:#fff;display:flex;flex-direction:column;align-items:center;" +
+        "justify-content:center;gap:20px;padding:24px;text-align:center;" +
+        "font:400 18px/1.7 sans-serif;";
+
+      const t = document.createElement("div");
+      t.textContent = "このタブレットは学習専用です";
+      t.style.cssText = "font-size:26px;font-weight:700;";
+
+      const m = document.createElement("div");
+      m.textContent = "このページは開けません。下のボタンから学習に戻ってください。";
+      m.style.cssText = "font-size:17px;color:#cbd5e1;";
+
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = "学習に戻る";
+      b.style.cssText =
+        "padding:16px 28px;border:0;border-radius:14px;cursor:pointer;" +
+        "background:#059669;color:#fff;font-size:20px;font-weight:700;";
+      b.addEventListener("click", () => {
+        location.href = "https://www.brain-program-001.com:3000/";
+      });
+
+      const note = document.createElement("div");
+      note.textContent =
+        "職員の方へ：解除は Tampermonkey のメニュー →「学習専用モード」から行えます。";
+      note.style.cssText = "font-size:12px;color:#64748b;margin-top:8px;";
+
+      o.appendChild(t);
+      o.appendChild(m);
+      o.appendChild(b);
+      o.appendChild(note);
+      root.appendChild(o);
+    };
+    draw();
+    // サイト側の描画で消されても出し直す
+    setInterval(draw, 700);
+  }
+
+  if (kioskOn() && !ALLOW_HOST.test(location.hostname)) {
+    showBlockedScreen();
+    return;
   }
 
   // ---- 動作確認モード ----
