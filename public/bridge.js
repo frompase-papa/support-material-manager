@@ -17,7 +17,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "1.6.0";
+  const VERSION = "1.7.0";
 
   // 二重に押されても、監視を二重に仕掛けない
   if (window.__smmBridge) {
@@ -374,6 +374,12 @@
   //   送信されず、まるごと欠ける（8問やったのに7問しか残らない）。
   let lastStartSig = "";
   let lastFinishSig = "";
+  /** 結果画面を1回見ているあいだ共通の番号。離れたら空にする。 */
+  let finishEventId = "";
+  /** 点数が見えない状態が何回続いたか */
+  let awayCount = 0;
+  /** これだけ続けて見えなければ「離れた」とみなす */
+  const AWAY_NEEDED = 3;
   // 1回の検知ごとに固有の番号。送り直しでは同じ番号、別の回では別の番号になる。
   function newEventId() {
     return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -407,20 +413,33 @@
   }
 
   function handleFinish() {
-    const isResult =
+    const onResultScreen =
       CONFIG.resultUrlPattern.test(location.href) ||
       /(\d+)\s*ポイント/.test(document.body.innerText || "");
-    if (!isResult) {
-      lastFinishSig = ""; // 画面を離れたら記憶を捨てる。次に戻った回は別の回として送る
+    const data = onResultScreen ? extractResult() : null;
+    const hasScore = !!(data && data.score);
+
+    // 「点数が見えない状態」が続いたら結果画面を離れたとみなす。
+    // ★ URLだけで判断すると、画面が変わってもURLが同じ場合に「離れた」と
+    //   判定できず、次の回が前回と同じ点数だと送信されない（8問が7問に）。
+    // ★ 1回見えないだけで離れたとすると、再描画の一瞬で二重送信になる（9問に）。
+    if (!hasScore) {
+      awayCount += 1;
+      if (awayCount >= AWAY_NEEDED) {
+        lastFinishSig = "";
+        finishEventId = "";
+      }
       return;
     }
+    awayCount = 0;
 
-    const data = extractResult();
-    if (!data.score) return; // 得点がまだ描画されていない
     const sig = `${data.studentId}|${data.title}|${data.score}|${data.date}`;
     if (sig === lastFinishSig) return;
     lastFinishSig = sig;
-    data.eventId = newEventId();
+    // 固有番号は結果画面を1回見ているあいだ共通にする。描画途中で点数が
+    // 変わって2回送られても1件にまとまり、確定値が残る。
+    if (!finishEventId) finishEventId = newEventId();
+    data.eventId = finishEventId;
 
     log("結果を送信", data);
     post("/api/study/finish", data).then((r) => {

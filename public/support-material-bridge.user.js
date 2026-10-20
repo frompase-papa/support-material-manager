@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         支援教材 学習記録ブリッジ
 // @namespace    support-material-manager
-// @version      2.0.0
+// @version      2.1.0
 // @description  brain-program の学習開始・結果を支援教材管理アプリへ自動送信します（拡張機能版と同じ動き）。
 // @author       支援教材管理アプリ
 // @match        *://*/*
@@ -40,7 +40,7 @@
 
   // ここと @version は必ず揃える。Tampermonkey は @version を見て自動更新するため、
   // 揃っていないと「画面には新しい番号が出るのに更新が配られない」状態になる。
-  const VERSION = "2.0.0";
+  const VERSION = "2.1.0";
 
   /**
    * 長押しで出るメニュー・文字選択を止める。
@@ -744,6 +744,13 @@
   //   実際、8問やったのに7問しか残らない生徒が出た（点数がたまたま揃ったため）。
   let lastStartSig = "";
   let lastFinishSig = "";
+  /** 結果画面を1回見ているあいだ共通の番号。離れたら空にする。 */
+  let finishEventId = "";
+  let finishSeq = 0;
+  /** 点数が見えない状態が何回続いたか */
+  let awayCount = 0;
+  /** これだけ続けて見えなければ「離れた」とみなす（一瞬の再描画で誤判定しないため） */
+  const AWAY_NEEDED = 3;
 
   /** 1回の検知ごとに固有の番号。送り直しでは同じ番号、別の回では別の番号になる。 */
   function newEventId() {
@@ -802,27 +809,43 @@
   }
 
   function handleFinish() {
-    const isResult =
+    const onResultScreen =
       CONFIG.resultUrlPattern.test(location.href) ||
       /(\d+)\s*ポイント/.test(document.body.innerText || "");
-    // 結果画面を離れたら記憶を捨てる。
-    // 次に戻ってきた回は、内容が前回と同じでも別の回として送る。
-    if (!isResult) {
-      lastFinishSig = "";
+    const data = onResultScreen ? extractResult() : null;
+    const hasScore = !!(data && data.score);
+
+    // 「点数が見えない状態」が続いたら、結果画面を離れたとみなす。
+    //
+    // ★ URLだけで判断してはいけない。このサイトは画面が変わってもURLが
+    //   結果画面のままのことがあり、それだと「離れた」と判定できず、
+    //   次の回が前回と同じ点数だったときに送信されない（8問が7問になる）。
+    // ★ 1回でも見えなくなったら離れた、としてもいけない。再描画の一瞬で
+    //   そうなることがあり、同じ回が二重に送られる（8問が9問になる）。
+    //   連続して数回見えないことを確かめる。
+    if (!hasScore) {
+      awayCount += 1;
+      if (awayCount >= AWAY_NEEDED) {
+        lastFinishSig = "";
+        finishEventId = "";
+      }
       return;
     }
+    awayCount = 0;
 
-    const data = extractResult();
-    if (!data.score) return; // 得点がまだ描画されていない
     const sig = `${data.studentId}|${data.title}|${data.score}|${data.date}`;
     if (sig === lastFinishSig) return;
     lastFinishSig = sig;
 
-    // 1回の検知ごとに固有の番号を付ける。
-    // 送信に失敗して送り直すときは同じ番号のままなので重複せず、
-    // 本当にもう一度やった回は別の番号になるので潰れない。
-    data.eventId = newEventId();
-    data.seq = nextSeq();
+    // 固有の番号は「結果画面を1回見ているあいだ」で共通にする。
+    // 点数が描画途中で変わって2回送られても、同じ番号なので1件にまとまり、
+    // 最後に送った（確定した）値が残る。次の回は番号が変わるので別件になる。
+    if (!finishEventId) {
+      finishEventId = newEventId();
+      finishSeq = nextSeq();
+    }
+    data.eventId = finishEventId;
+    data.seq = finishSeq;
 
     log("結果を送信", data);
     post("/api/study/finish", data).then((r) => {

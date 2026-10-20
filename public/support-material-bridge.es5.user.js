@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         支援教材 学習記録ブリッジ（旧ブラウザ対応版）
 // @namespace    support-material-manager
-// @version      2.0.0
+// @version      2.1.0
 // @description  brain-program の学習開始・結果を支援教材管理アプリへ自動送信します（拡張機能版と同じ動き）。
 // @author       支援教材管理アプリ
 // @match        *://*/*
@@ -19,7 +19,7 @@
 "use strict";
 (function() {
   "use strict";
-  const VERSION = "2.0.0";
+  const VERSION = "2.1.0";
   function suppressLongPressMenu() {
     const isEditable = (t) => {
       if (!t || !t.tagName) return false;
@@ -494,6 +494,10 @@
   }
   let lastStartSig = "";
   let lastFinishSig = "";
+  let finishEventId = "";
+  let finishSeq = 0;
+  let awayCount = 0;
+  const AWAY_NEEDED = 3;
   function newEventId() {
     return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
   }
@@ -535,18 +539,27 @@
     });
   }
   function handleFinish() {
-    const isResult = CONFIG.resultUrlPattern.test(location.href) || /(\d+)\s*ポイント/.test(document.body.innerText || "");
-    if (!isResult) {
-      lastFinishSig = "";
+    const onResultScreen = CONFIG.resultUrlPattern.test(location.href) || /(\d+)\s*ポイント/.test(document.body.innerText || "");
+    const data = onResultScreen ? extractResult() : null;
+    const hasScore = !!(data && data.score);
+    if (!hasScore) {
+      awayCount += 1;
+      if (awayCount >= AWAY_NEEDED) {
+        lastFinishSig = "";
+        finishEventId = "";
+      }
       return;
     }
-    const data = extractResult();
-    if (!data.score) return;
+    awayCount = 0;
     const sig = `${data.studentId}|${data.title}|${data.score}|${data.date}`;
     if (sig === lastFinishSig) return;
     lastFinishSig = sig;
-    data.eventId = newEventId();
-    data.seq = nextSeq();
+    if (!finishEventId) {
+      finishEventId = newEventId();
+      finishSeq = nextSeq();
+    }
+    data.eventId = finishEventId;
+    data.seq = finishSeq;
     log("\u7D50\u679C\u3092\u9001\u4FE1", data);
     post("/api/study/finish", data).then((r) => {
       var _a, _b;
