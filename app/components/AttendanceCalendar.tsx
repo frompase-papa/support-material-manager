@@ -33,6 +33,7 @@ import { MaterialMasterPanel } from "@/app/components/MaterialMasterPanel";
 import { SupportProgramMasterPanel } from "@/app/components/SupportProgramMasterPanel";
 import { SupportProgramAssignment } from "@/app/components/SupportProgramAssignment";
 import { WeekPrintSheet } from "@/app/components/WeekPrintSheet";
+import { DayPrintSheet } from "@/app/components/DayPrintSheet";
 import {
   AssessmentSheetPanel,
   isSafeHttpUrl,
@@ -591,6 +592,7 @@ function DayView({
   const absentNames = store.getAbsentNamesOnDate(date);
   const unattended = store.getUnattendedStudents(date);
   const isToday = isSameDay(date, today);
+  const [printOpen, setPrintOpen] = useState(false);
 
   return (
     <section>
@@ -634,6 +636,14 @@ function DayView({
           />
           <button
             type="button"
+            onClick={() => setPrintOpen(true)}
+            title="この日のカリキュラム・タブレットの生徒をA3横1枚で印刷します（ホワイトボード用）"
+            className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            🖨 A3印刷
+          </button>
+          <button
+            type="button"
             onClick={() => onMove(today)}
             className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
@@ -670,6 +680,14 @@ function DayView({
 
       {absentNames.length > 0 && (
         <p className="mt-3 text-xs text-zinc-400">欠席：{absentNames.join("、")}</p>
+      )}
+
+      {printOpen && (
+        <DayPrintSheet
+          store={store}
+          date={date}
+          onClose={() => setPrintOpen(false)}
+        />
       )}
 
       {unattended.length > 0 && (

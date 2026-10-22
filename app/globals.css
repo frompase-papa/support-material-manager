@@ -46,12 +46,13 @@ body {
    * シートは body 直下（ポータル）に出しているので、それ以外を display:none で消す。
    * visibility:hidden だと場所が残り、白紙ページが大量に出てしまう。
    */
-  body > *:not(#week-print-portal) {
+  body > *:not(#week-print-portal):not(#day-print-portal) {
     display: none !important;
   }
 
   /* オーバーレイの装飾を落として、用紙だけが残るようにする */
-  #week-print-portal {
+  #week-print-portal,
+  #day-print-portal {
     position: static !important;
     inset: auto !important;
     z-index: auto !important;
@@ -60,7 +61,18 @@ body {
     padding: 0 !important;
   }
 
-  #week-print-sheet {
+  /* 当日シートだけ A3 横（名前付きページで週シートのA4と共存させる） */
+  @page a3day {
+    size: A3 landscape;
+    margin: 10mm;
+  }
+
+  #day-print-sheet {
+    page: a3day;
+  }
+
+  #week-print-sheet,
+  #day-print-sheet {
     margin: 0 !important;
     box-shadow: none !important;
     break-inside: avoid;
