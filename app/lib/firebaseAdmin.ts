@@ -13,7 +13,6 @@ import {
   type App,
 } from "firebase-admin/app";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
-import { getAuth, type Auth } from "firebase-admin/auth";
 
 function loadServiceAccount(): Record<string, string> | null {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -52,8 +51,14 @@ export function getAdminDb(): Firestore | null {
   return app ? getFirestore(app) : null;
 }
 
-/** Admin用 Auth（ログインの通行証＝カスタムトークンを作るのに使う）。未設定なら null。 */
-export function getAdminAuth(): Auth | null {
+/**
+ * Admin用 Auth（ログインの通行証＝カスタムトークンを作るのに使う）。未設定なら null。
+ * firebase-admin/auth は、ここで先頭から読み込むと、この部品を使う他のAPI（出欠の受け口など）まで
+ * 巻き込んで止めてしまったことがあるため、使うときだけ読み込む。
+ */
+export async function getAdminAuth() {
   const app = getAdminApp();
-  return app ? getAuth(app) : null;
+  if (!app) return null;
+  const { getAuth } = await import("firebase-admin/auth");
+  return getAuth(app);
 }

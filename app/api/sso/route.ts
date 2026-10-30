@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   if (!claims) {
     return Response.json({ ok: false, error: "通行証が正しくないか、期限が切れています" }, { status: 401 });
   }
-  const auth = getAdminAuth();
+  const auth = await getAdminAuth();
   if (!auth) {
     return Response.json({ ok: false, error: "server not configured (FIREBASE_SERVICE_ACCOUNT)" }, { status: 503 });
   }
