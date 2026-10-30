@@ -16,15 +16,21 @@ export async function POST(req: Request) {
   if (!claims) {
     return Response.json({ ok: false, error: "通行証が正しくないか、期限が切れています" }, { status: 401 });
   }
-  const auth = await getAdminAuth();
-  if (!auth) {
-    return Response.json({ ok: false, error: "server not configured (FIREBASE_SERVICE_ACCOUNT)" }, { status: 503 });
+  try {
+    const auth = await getAdminAuth();
+    if (!auth) {
+      return Response.json({ ok: false, error: "server not configured (FIREBASE_SERVICE_ACCOUNT)" }, { status: 503 });
+    }
+    // day: ログインの有効な日。日付が変わったら、画面側（AuthProvider）がログアウトさせる
+    const customToken = await auth.createCustomToken(`staff-${claims.staffId}`, {
+      sso: true,
+      day: todayJST(),
+      name: claims.name,
+    });
+    return Response.json({ ok: true, customToken });
+  } catch (e) {
+    // 失敗しても画面は「メールアドレスでログイン」へ案内できるよう、理由をJSONで返す
+    console.error("[sso] ログイン用トークンを作れませんでした", e);
+    return Response.json({ ok: false, error: "ログイン用トークンを作れませんでした" }, { status: 500 });
   }
-  // day: ログインの有効な日。日付が変わったら、画面側（AuthProvider）がログアウトさせる
-  const customToken = await auth.createCustomToken(`staff-${claims.staffId}`, {
-    sso: true,
-    day: todayJST(),
-    name: claims.name,
-  });
-  return Response.json({ ok: true, customToken });
 }
