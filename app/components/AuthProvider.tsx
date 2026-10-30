@@ -29,6 +29,15 @@ export function useAuth() {
   return useContext(AuthContext);
 }
 
+const todayJST = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo" }).format(new Date());
+
+// 送迎管理アプリのログインから入った人（sso）は、その日の夜12時（日本時間）までで切れる。
+// メールアドレスとパスワードで入った人は、今まで通り切れない
+async function loginExpired(u: User): Promise<boolean> {
+  const { claims } = await u.getIdTokenResult();
+  return claims.sso === true && typeof claims.day === "string" && claims.day !== todayJST();
+}
+
 /**
  * ログイン状態を管理し、未ログインならログイン画面を表示するゲート。
  * ログイン済みのときだけ children（アプリ本体）を描画する。
@@ -38,11 +47,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    return onAuthStateChanged(auth, (u) => {
+    return onAuthStateChanged(auth, async (u) => {
+      if (u && (await loginExpired(u).catch(() => false))) {
+        await fbSignOut(auth);
+        return; // サインアウトで、もう一度この関数が呼ばれる
+      }
       setUser(u);
       setReady(true);
     });
   }, []);
+
+  // 開きっぱなしのまま日付が変わっても、その日のうちに切れるようにする
+  useEffect(() => {
+    if (!user) return;
+    const check = () => {
+      loginExpired(user).then((expired) => { if (expired) fbSignOut(auth); }).catch(() => {});
+    };
+    const timer = setInterval(check, 60_000);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, [user]);
 
   if (!ready) {
     return (
@@ -106,6 +133,10 @@ function LoginForm() {
         <h1 className="text-xl font-bold">支援教材管理アプリ</h1>
         <p className="mt-1 mb-5 text-sm text-zinc-500 dark:text-zinc-400">
           ログインしてください
+        </p>
+        <p className="mb-5 rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:bg-blue-950 dark:text-blue-100">
+          職員の方は、<a href="https://shift-manager-self.vercel.app/" className="font-medium underline">社内ポータル</a>
+          でログインして、「支援アプリ」のアイコンから開くと、ここでのログインは不要です。
         </p>
 
         <label className="mb-1 block text-sm font-medium">メールアドレス</label>
