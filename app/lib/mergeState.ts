@@ -44,6 +44,15 @@ export interface PersistedState {
    * presentByDate とは別の欄に持つ。
    */
   transportAdditions: Record<string, string[]>;
+  /**
+   * この支援アプリの画面で「休み」にした児童。dateKey -> 児童名[]
+   *
+   * 送迎アプリからの同期は transportAbsences / transportAdditions だけを置き換えるので、
+   * 画面での操作は別の欄に持つ（同期で消えない）。画面での操作は送迎アプリの内容より優先する。
+   */
+  supportAbsences: Record<string, string[]>;
+  /** この支援アプリの画面で「出席を追加」した児童。dateKey -> 児童名[] */
+  supportAdditions: Record<string, string[]>;
 }
 
 /** null/空配列/空オブジェクト/空文字 を「空」とみなす */
@@ -99,5 +108,7 @@ export function mergePreferNonEmpty(
     supportAssignments: pick(local.supportAssignments, cloud.supportAssignments),
     transportAbsences: pick(local.transportAbsences, cloud.transportAbsences),
     transportAdditions: pick(local.transportAdditions, cloud.transportAdditions),
+    supportAbsences: pick(local.supportAbsences ?? {}, cloud.supportAbsences),
+    supportAdditions: pick(local.supportAdditions ?? {}, cloud.supportAdditions),
   };
 }

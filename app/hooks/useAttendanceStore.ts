@@ -155,6 +155,9 @@ export function useAttendanceStore(): AttendanceStore {
   const [transportAbsences, setTransportAbsences] = useState<Record<string, string[]>>({});
   // 送迎アプリ側で「来る」になっている児童（月の予定に無い追加利用もここに入る）
   const [transportAdditions, setTransportAdditions] = useState<Record<string, string[]>>({});
+  // この画面で「休み」「出席を追加」にした児童（送迎アプリの同期では消えない。送迎アプリの内容より優先）
+  const [supportAbsences, setSupportAbsences] = useState<Record<string, string[]>>({});
+  const [supportAdditions, setSupportAdditions] = useState<Record<string, string[]>>({});
   const [materials, setMaterials] = useState<TeachingMaterial[]>(
     DEFAULT_TEACHING_MATERIALS
   );
@@ -182,6 +185,8 @@ export function useAttendanceStore(): AttendanceStore {
     setAbsentByDate(d.absentByDate ?? {});
     setTransportAbsences(d.transportAbsences ?? {});
     setTransportAdditions(d.transportAdditions ?? {});
+    setSupportAbsences(d.supportAbsences ?? {});
+    setSupportAdditions(d.supportAdditions ?? {});
     if (d.materials) setMaterials(d.materials);
     setAssignments(d.assignments ?? {});
     setNotes(d.notes ?? {});
@@ -252,6 +257,8 @@ export function useAttendanceStore(): AttendanceStore {
       supportAssignments,
       transportAbsences,
       transportAdditions,
+      supportAbsences,
+      supportAdditions,
     }),
     [
       typeById,
@@ -264,6 +271,10 @@ export function useAttendanceStore(): AttendanceStore {
       assessmentUrl,
       supportPrograms,
       supportAssignments,
+      transportAbsences,
+      transportAdditions,
+      supportAbsences,
+      supportAdditions,
     ]
   );
 
@@ -392,6 +403,7 @@ export function useAttendanceStore(): AttendanceStore {
     for (const list of Object.values(absentByDate)) list.forEach((n) => names.add(n));
     // 送迎アプリから来た子も名簿に入れる（月の予定に無い追加利用の初日でも出せるように）
     for (const list of Object.values(transportAdditions)) list.forEach((n) => names.add(n));
+    for (const list of Object.values(supportAdditions)) list.forEach((n) => names.add(n));
     Object.keys(typeById).forEach((n) => names.add(n));
 
     return [...names]
@@ -402,21 +414,27 @@ export function useAttendanceStore(): AttendanceStore {
         type: typeById[name] ?? DEFAULT_STUDENT_TYPE,
         color: colorForName(name),
       }));
-  }, [presentByDate, absentByDate, transportAdditions, typeById]);
+  }, [presentByDate, absentByDate, transportAdditions, supportAdditions, typeById]);
 
-  // 出席は「月のカレンダー取込 ＋ 送迎アプリの来る子 − 送迎アプリの休みの子」。
-  // 送迎アプリを正とするので、月の予定に無い追加利用も出て、休みは外れる
+  // 出席は「月のカレンダー取込 ＋ 送迎アプリの来る子 − 送迎アプリの休みの子」に、
+  // この画面での操作（休み／出席を追加）を重ねたもの。この画面での操作が最優先
   const records = useMemo<AttendanceRecord[]>(() => {
     const dates = new Set([
       ...Object.keys(presentByDate),
       ...Object.keys(transportAdditions),
+      ...Object.keys(supportAdditions),
     ]);
     const recs: AttendanceRecord[] = [];
     for (const dateKey of dates) {
-      const off = new Set(transportAbsences[dateKey] ?? []);
+      const added = new Set(supportAdditions[dateKey] ?? []);
+      const off = new Set([
+        ...(transportAbsences[dateKey] ?? []).filter((n) => !added.has(n)),
+        ...(supportAbsences[dateKey] ?? []),
+      ]);
       const ids = new Set([
         ...(presentByDate[dateKey] ?? []),
         ...(transportAdditions[dateKey] ?? []),
+        ...added,
       ]);
       for (const id of ids) {
         if (off.has(id)) continue;
@@ -424,7 +442,7 @@ export function useAttendanceStore(): AttendanceStore {
       }
     }
     return recs;
-  }, [presentByDate, transportAdditions, transportAbsences]);
+  }, [presentByDate, transportAdditions, transportAbsences, supportAdditions, supportAbsences]);
 
   const resolved = useMemo(
     () => resolveAttendance(students, records, overrides),
@@ -454,8 +472,17 @@ export function useAttendanceStore(): AttendanceStore {
   );
 
   const getAbsentNamesOnDate = useCallback(
-    (date: Date): string[] => absentByDate[toDateKey(date)] ?? [],
-    [absentByDate]
+    (date: Date): string[] => {
+      const key = toDateKey(date);
+      const present = new Set(records.filter((r) => r.date === key).map((r) => r.studentId));
+      const all = new Set([
+        ...(absentByDate[key] ?? []),
+        ...(transportAbsences[key] ?? []),
+        ...(supportAbsences[key] ?? []),
+      ]);
+      return [...all].filter((n) => !present.has(n)).sort((a, b) => a.localeCompare(b, "ja"));
+    },
+    [records, absentByDate, transportAbsences, supportAbsences]
   );
 
   const countPendingOnDate = useCallback(
@@ -466,10 +493,11 @@ export function useAttendanceStore(): AttendanceStore {
 
   const getUnattendedStudents = useCallback(
     (date: Date): Student[] => {
-      const present = new Set(presentByDate[toDateKey(date)] ?? []);
+      const key = toDateKey(date);
+      const present = new Set(records.filter((r) => r.date === key).map((r) => r.studentId));
       return students.filter((s) => !present.has(s.id));
     },
-    [presentByDate, students]
+    [records, students]
   );
 
   const setStudentType = useCallback((studentId: string, type: StudentType) => {
@@ -495,12 +523,12 @@ export function useAttendanceStore(): AttendanceStore {
 
   const addAttendance = useCallback((studentId: string, date: Date) => {
     const key = toDateKey(date);
-    setPresentByDate((prev) => {
+    setSupportAdditions((prev) => {
       const list = prev[key] ?? [];
       if (list.includes(studentId)) return prev;
       return { ...prev, [key]: [...list, studentId] };
     });
-    setAbsentByDate((prev) => {
+    setSupportAbsences((prev) => {
       const list = prev[key];
       if (!list || !list.includes(studentId)) return prev;
       const nextList = list.filter((id) => id !== studentId);
@@ -514,7 +542,12 @@ export function useAttendanceStore(): AttendanceStore {
   const removeAttendance = useCallback((studentId: string, date: Date) => {
     const key = toDateKey(date);
     const recId = makeRecordId(studentId, key);
-    setPresentByDate((prev) => {
+    setSupportAbsences((prev) => {
+      const list = prev[key] ?? [];
+      if (list.includes(studentId)) return prev;
+      return { ...prev, [key]: [...list, studentId] };
+    });
+    setSupportAdditions((prev) => {
       const list = prev[key];
       if (!list || !list.includes(studentId)) return prev;
       const nextList = list.filter((id) => id !== studentId);
@@ -522,11 +555,6 @@ export function useAttendanceStore(): AttendanceStore {
       if (nextList.length > 0) next[key] = nextList;
       else delete next[key];
       return next;
-    });
-    setAbsentByDate((prev) => {
-      const list = prev[key] ?? [];
-      if (list.includes(studentId)) return prev;
-      return { ...prev, [key]: [...list, studentId] };
     });
     setOverrides((prev) => {
       if (!(recId in prev)) return prev;
@@ -579,6 +607,8 @@ export function useAttendanceStore(): AttendanceStore {
   const clearAll = useCallback(() => {
     setPresentByDate({});
     setAbsentByDate({});
+    setSupportAbsences({});
+    setSupportAdditions({});
     setOverrides({});
     setAssignments({});
   }, []);
