@@ -11,6 +11,8 @@ import { auth } from "@/app/lib/firebase";
 export default function SsoPage() {
   const [message, setMessage] = useState("ログインしています…");
   const [failed, setFailed] = useState(false);
+  // 失敗の理由（原因を調べる手がかりとして画面に出す）
+  const [detail, setDetail] = useState("");
 
   useEffect(() => {
     const token = new URLSearchParams(location.hash.replace(/^#/, "")).get("token");
@@ -27,11 +29,18 @@ export default function SsoPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token }),
         });
-        const json = (await res.json()) as { ok: boolean; customToken?: string; error?: string };
-        if (!json.ok || !json.customToken) throw new Error(json.error ?? "ログインできませんでした");
-        await signInWithCustomToken(auth, json.customToken);
+        const json = (await res.json().catch(() => null)) as { ok: boolean; customToken?: string; error?: string } | null;
+        if (!json?.ok || !json.customToken) {
+          throw new Error(`通行証の確認 (${res.status}): ${json?.error ?? "応答を読めませんでした"}`);
+        }
+        try {
+          await signInWithCustomToken(auth, json.customToken);
+        } catch (e) {
+          throw new Error(`ログイン処理: ${(e as { code?: string }).code ?? (e as Error).message}`);
+        }
         location.replace("/");
-      } catch {
+      } catch (e) {
+        setDetail((e as Error).message);
         setFailed(true);
         setMessage("自動ログインできませんでした。");
       }
@@ -41,6 +50,7 @@ export default function SsoPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-3 text-sm text-zinc-500">
       <p>{message}</p>
+      {failed && detail && <p className="max-w-sm break-words px-4 text-xs text-zinc-400">原因: {detail}</p>}
       {failed && (
         <Link href="/" className="text-blue-600 underline">
           ログイン画面へ（メールアドレスとパスワードで入る）
