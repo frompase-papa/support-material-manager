@@ -6,16 +6,19 @@ import {
   type Student,
   type StudentType,
 } from "@/app/lib/students";
+import type { StudentStudy } from "@/app/lib/teachingMaterials";
 
 /**
  * 生徒の提供形態（交互提供 / カリキュラム固定）を変更する設定モーダル。
  */
 export function StudentSettingsPanel({
   students,
+  getStudy,
   onChangeType,
   onClose,
 }: {
   students: Student[];
+  getStudy: (studentId: string) => StudentStudy;
   onChangeType: (studentId: string, type: StudentType) => void;
   onClose: () => void;
 }) {
@@ -55,6 +58,7 @@ export function StudentSettingsPanel({
         <p className="mb-4 text-xs text-zinc-500 dark:text-zinc-400">
           各生徒の提供形態を変更できます。「交互提供」は前回実績の反対を自動でセットし、
           「カリキュラム固定」は原則カリキュラムを提供します。
+          SSTの有無とプリント枚数は、送迎管理アプリの「生徒管理」で決めた内容が自動で入ります（ここでは直せません）。
         </p>
 
         <ul className="flex flex-col gap-3">
@@ -69,6 +73,9 @@ export function StudentSettingsPanel({
                   style={{ backgroundColor: s.color }}
                 />
                 <span className="font-medium">{s.name}</span>
+                <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                  {getStudy(s.id).hasSST ? "SSTあり" : "SSTなし"} / {getStudy(s.id).printCount}枚
+                </span>
                 {s.grade && (
                   <span className="text-xs text-zinc-400">{s.grade}</span>
                 )}

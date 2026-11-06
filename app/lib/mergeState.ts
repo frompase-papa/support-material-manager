@@ -8,6 +8,7 @@ import type { Material } from "@/app/lib/attendance";
 import type { StudentType } from "@/app/lib/students";
 import {
   DEFAULT_TEACHING_MATERIALS,
+  type StudentStudy,
   type TeachingMaterial,
 } from "@/app/lib/teachingMaterials";
 import type { SupportProgram } from "@/app/lib/supportPrograms";
@@ -53,7 +54,15 @@ export interface PersistedState {
   supportAbsences: Record<string, string[]>;
   /** この支援アプリの画面で「出席を追加」した児童。dateKey -> 児童名[] */
   supportAdditions: Record<string, string[]>;
+  /**
+   * 生徒ごとの学習設定（SSTの有無・プリント枚数）。児童名 -> 設定
+   *
+   * 送迎アプリの児童管理で決めた内容が、送迎アプリから /api/study-settings で届く。
+   * 画面側は読むだけ（transportAbsences と同じく、送迎アプリを正とする）。
+   */
+  studentStudy?: Record<string, StudentStudy>;
 }
+
 
 /** null/空配列/空オブジェクト/空文字 を「空」とみなす */
 export function isEmptyVal(v: unknown): boolean {
@@ -110,5 +119,6 @@ export function mergePreferNonEmpty(
     transportAdditions: pick(local.transportAdditions, cloud.transportAdditions),
     supportAbsences: pick(local.supportAbsences ?? {}, cloud.supportAbsences),
     supportAdditions: pick(local.supportAdditions ?? {}, cloud.supportAdditions),
+    studentStudy: pick(local.studentStudy ?? {}, cloud.studentStudy),
   };
 }

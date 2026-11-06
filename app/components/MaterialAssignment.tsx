@@ -2,7 +2,6 @@
 
 import type { AttendanceStore } from "@/app/hooks/useAttendanceStore";
 import {
-  MAX_MATERIALS_PER_DAY,
   TM_TYPE_LABEL,
   TM_TYPE_OPTIONS,
   tmTypeBadgeClass,
@@ -10,7 +9,7 @@ import {
 } from "@/app/lib/teachingMaterials";
 
 /**
- * 「要教材選定」の生徒に、本日の提供教材（最大3枚）を割り当てるUI。
+ * 「要教材選定」の生徒に、本日の提供教材（生徒ごとの枚数まで）を割り当てるUI。
  * タイトルはクリックで別タブ（target="_blank"）で開く。
  */
 export function MaterialAssignment({
@@ -29,18 +28,21 @@ export function MaterialAssignment({
     .map((id) => store.getMaterialById(id))
     .filter((m): m is TeachingMaterial => Boolean(m));
 
+  // 枚数とSSTの有無は、送迎アプリの児童管理で生徒ごとに決めたもの
+  const study = store.getStudy(studentId);
+  const max = study.printCount;
   const available = store.materials.filter((m) => !assignedIds.includes(m.id));
-  const canAdd = assigned.length < MAX_MATERIALS_PER_DAY;
+  const canAdd = assigned.length < max;
 
   return (
     <div className="mt-3 rounded-lg bg-amber-50 p-2.5 dark:bg-amber-950/20">
       <div className="mb-1.5 flex items-center justify-between">
         <span className="text-xs font-semibold text-amber-800 dark:text-amber-300">
-          教材選定（{assigned.length}/{MAX_MATERIALS_PER_DAY}）
+          教材選定（{assigned.length}/{max}）
         </span>
         {!readOnly && (
           <span className="text-[10px] text-amber-700/70 dark:text-amber-400/70">
-            自由問題2＋SST1、または自由問題3
+            {study.hasSST ? `SSTあり・${max}枚（SSTを含む）` : `SSTなし・${max}枚（自由問題）`}
           </span>
         )}
       </div>
@@ -114,7 +116,7 @@ export function MaterialAssignment({
 
       {!readOnly && !canAdd && (
         <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-400">
-          上限の{MAX_MATERIALS_PER_DAY}枚に達しています。
+          上限の{max}枚に達しています。
         </p>
       )}
     </div>

@@ -24,8 +24,24 @@ export interface TeachingMaterial {
   type: TeachingMaterialType;
 }
 
-/** 教材選定の1日あたり上限（自由問題2＋SST1、または自由問題3 の運用） */
+/** 教材選定の1日あたりの既定の枚数（自由問題2＋SST1、または自由問題3 の運用） */
 export const MAX_MATERIALS_PER_DAY = 3;
+
+/** 生徒ごとに決められる枚数の上限（送迎アプリの児童管理と同じ） */
+export const MAX_PRINT_COUNT = 10;
+
+/** 生徒ごとの学習設定。送迎アプリの児童管理で決める */
+export interface StudentStudy {
+  hasSST: boolean;
+  printCount: number;
+}
+
+/** 設定が届いていない生徒は、今までどおり「SSTあり・3枚」 */
+export const DEFAULT_STUDY: StudentStudy = { hasSST: true, printCount: MAX_MATERIALS_PER_DAY };
+
+export function studyOf(map: Record<string, StudentStudy>, studentId: string): StudentStudy {
+  return map[studentId] ?? DEFAULT_STUDY;
+}
 
 /** 種別バッジの色クラス */
 export function tmTypeBadgeClass(type: TeachingMaterialType): string {

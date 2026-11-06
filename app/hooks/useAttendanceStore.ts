@@ -23,8 +23,10 @@ import {
 } from "@/app/lib/attendance";
 import {
   DEFAULT_TEACHING_MATERIALS,
-  MAX_MATERIALS_PER_DAY,
+  MAX_PRINT_COUNT,
   newMaterialId,
+  studyOf,
+  type StudentStudy,
   type TeachingMaterial,
 } from "@/app/lib/teachingMaterials";
 import {
@@ -86,6 +88,8 @@ export interface AttendanceStore {
   getUnattendedStudents: (date: Date) => Student[];
 
   setStudentType: (studentId: string, type: StudentType) => void;
+  /** 生徒のSSTの有無・プリント枚数（送迎アプリの設定。未設定なら「SSTあり・3枚」） */
+  getStudy: (studentId: string) => StudentStudy;
   setMaterial: (studentId: string, date: Date, material: Material) => void;
   clearMaterial: (studentId: string, date: Date) => void;
   addAttendance: (studentId: string, date: Date) => void;
@@ -158,6 +162,8 @@ export function useAttendanceStore(): AttendanceStore {
   // この画面で「休み」「出席を追加」にした児童（送迎アプリの同期では消えない。送迎アプリの内容より優先）
   const [supportAbsences, setSupportAbsences] = useState<Record<string, string[]>>({});
   const [supportAdditions, setSupportAdditions] = useState<Record<string, string[]>>({});
+  // 送迎アプリの児童管理で決めた、生徒ごとのSSTの有無・プリント枚数（送迎アプリからのみ書き込まれる）
+  const [studentStudy, setStudentStudy] = useState<Record<string, StudentStudy>>({});
   const [materials, setMaterials] = useState<TeachingMaterial[]>(
     DEFAULT_TEACHING_MATERIALS
   );
@@ -187,6 +193,7 @@ export function useAttendanceStore(): AttendanceStore {
     setTransportAdditions(d.transportAdditions ?? {});
     setSupportAbsences(d.supportAbsences ?? {});
     setSupportAdditions(d.supportAdditions ?? {});
+    setStudentStudy(d.studentStudy ?? {});
     if (d.materials) setMaterials(d.materials);
     setAssignments(d.assignments ?? {});
     setNotes(d.notes ?? {});
@@ -259,6 +266,7 @@ export function useAttendanceStore(): AttendanceStore {
       transportAdditions,
       supportAbsences,
       supportAdditions,
+      studentStudy,
     }),
     [
       typeById,
@@ -275,6 +283,7 @@ export function useAttendanceStore(): AttendanceStore {
       transportAdditions,
       supportAbsences,
       supportAdditions,
+      studentStudy,
     ]
   );
 
@@ -368,7 +377,7 @@ export function useAttendanceStore(): AttendanceStore {
         for (const [rec, ids] of Object.entries(local.assignments ?? {})) {
           const merged = [...(next[rec] ?? [])];
           for (const id of ids) {
-            if (!merged.includes(id) && merged.length < MAX_MATERIALS_PER_DAY) {
+            if (!merged.includes(id) && merged.length < MAX_PRINT_COUNT) {
               merged.push(id);
             }
           }
@@ -682,12 +691,12 @@ export function useAttendanceStore(): AttendanceStore {
       const recId = makeRecordId(studentId, toDateKey(date));
       setAssignments((prev) => {
         const list = prev[recId] ?? [];
-        if (list.includes(materialId) || list.length >= MAX_MATERIALS_PER_DAY)
+        if (list.includes(materialId) || list.length >= studyOf(studentStudy, studentId).printCount)
           return prev;
         return { ...prev, [recId]: [...list, materialId] };
       });
     },
-    []
+    [studentStudy]
   );
   const removeAssignment = useCallback(
     (studentId: string, date: Date, materialId: string) => {
@@ -815,6 +824,7 @@ export function useAttendanceStore(): AttendanceStore {
     countPendingOnDate,
     getUnattendedStudents,
     setStudentType,
+    getStudy: (studentId: string) => studyOf(studentStudy, studentId),
     setMaterial,
     clearMaterial,
     addAttendance,

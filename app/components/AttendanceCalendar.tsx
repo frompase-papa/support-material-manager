@@ -225,6 +225,7 @@ export default function AttendanceCalendar() {
 
       {settingsOpen && (
         <StudentSettingsPanel
+          getStudy={store.getStudy}
           students={store.students}
           onChangeType={store.setStudentType}
           onClose={() => setSettingsOpen(false)}
