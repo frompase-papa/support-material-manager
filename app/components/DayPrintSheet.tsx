@@ -173,11 +173,7 @@ export function DayPrintPage({
                               </span>
                             )}
                           </div>
-                          {row.materials.length === 0 ? (
-                            <p className="text-[12pt] text-black/50">
-                              教材未選定
-                            </p>
-                          ) : (
+                          {row.materials.length > 0 && (
                             <ol>
                               {row.materials.map((m) => (
                                 <li
