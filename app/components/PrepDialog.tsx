@@ -39,7 +39,7 @@ export function PrepDialog({
   const cards: { key: PrepKind | "curriculum"; title: string; desc: string }[] = [
     { key: "snack", title: "① おやつ確認表", desc: "来る全員の名前。「済」「OT」は印刷後に貼ります" },
     { key: "curriculum", title: "② カリキュラム・タブレット確認表", desc: "カリキュラムの子（教材つき）とタブレットの子" },
-    { key: "leave", title: "③ 17じ／18じ表", desc: "帰りの送り出発時刻ごと。名前はひらがな（送迎アプリから取得）" },
+    { key: "leave", title: "③ 17じ／18じ表", desc: "帰りの送り出発時刻ごと。苗字は漢字・名前はひらがな（送迎アプリから取得）" },
   ];
 
   return createPortal(

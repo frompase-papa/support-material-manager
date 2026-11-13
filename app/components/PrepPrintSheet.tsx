@@ -8,7 +8,7 @@ import { formatFullDate, toDateKey } from "@/app/lib/date";
 /**
  * 翌日準備のホワイトボード用シート（A3横1枚）。
  *   snack … おやつ確認表（その日来る全員の名前。「済」「OT」は印刷後に手で貼る）
- *   leave … 17じ／18じ表（帰りの送り出発時刻ごと。名前はひらがな）
+ *   leave … 17じ／18じ表（帰りの送り出発時刻ごと。苗字は漢字・名前はひらがな）
  *
  * 印刷の仕組み（body直下に出す・用紙サイズ）は DayPrintSheet と同じ。
  * globals.css の #day-print-portal / #day-print-sheet をそのまま使う。
@@ -25,6 +25,18 @@ const SHEET_H_MM = 276;
 const COLUMN_COLORS = ["#f9a8d4", "#93c5fd", "#fde68a", "#86efac", "#c4b5fd"];
 
 const ja = (a: string, b: string) => a.localeCompare(b, "ja");
+
+/**
+ * ボードの表記（「山本 なつめ」）に合わせる。苗字は漢字、名前はひらがな。
+ * 苗字・名前は空白（半角・全角）で分けてある前提。分けられないときは、ふりがな→漢字名の順で出す
+ */
+function boardName(c: PlanChild): string {
+  const split = (v: string) => v.trim().split(/[\s　]+/).filter(Boolean);
+  const kanji = split(c.name);
+  const kana = split(c.furigana);
+  if (kanji.length >= 2 && kana.length >= 2) return `${kanji[0]} ${kana.slice(1).join("")}`;
+  return c.furigana ? kana.join(" ") : c.name;
+}
 
 /** 人数に応じて1枚に収まる文字の大きさ（pt） */
 function fontPt(count: number): number {
@@ -181,7 +193,7 @@ export function PrepPrintSheet({
                   <ul style={{ fontSize: `${pt}pt` }}>
                     {col.kids.map((k) => (
                       <li key={k.name} className="border-b-2 border-dotted border-black/40 py-1 font-bold leading-tight">
-                        {k.furigana || k.name}
+                        {boardName(k)}
                       </li>
                     ))}
                   </ul>
