@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AttendanceStore } from "@/app/hooks/useAttendanceStore";
 import { formatFullDate, toDateKey } from "@/app/lib/date";
+import { normalizeName } from "@/app/lib/nameMatch";
 
 /**
  * 翌日準備のホワイトボード用シート（A3横1枚）。
@@ -89,10 +90,17 @@ export function PrepPrintSheet({
     };
   }, [kind, dateKey]);
 
+  // 支援アプリの画面で付けた「休み」も反映する（送迎アプリ側だけでは分からないため）
+  const visiblePlan = useMemo(() => {
+    if (!plan) return null;
+    const absent = new Set(store.getAbsentNamesOnDate(date).map(normalizeName));
+    return plan.filter((c) => !absent.has(normalizeName(c.name)));
+  }, [plan, store, date]);
+
   const columns = useMemo(() => {
-    if (!plan) return [];
+    if (!visiblePlan) return [];
     const byHour = new Map<string, PlanChild[]>();
-    for (const c of plan) {
+    for (const c of visiblePlan) {
       const h = c.leaveTime ? String(Number(c.leaveTime.split(":")[0])) : "";
       byHour.set(h, [...(byHour.get(h) ?? []), c]);
     }
@@ -104,7 +112,7 @@ export function PrepPrintSheet({
           (a, b) => (a.leaveTime ?? "").localeCompare(b.leaveTime ?? "") || ja(a.furigana || a.name, b.furigana || b.name)
         ),
       }));
-  }, [plan]);
+  }, [visiblePlan]);
 
   if (typeof document === "undefined") return null;
 
@@ -154,7 +162,7 @@ export function PrepPrintSheet({
             <h1 className="text-[30pt] font-bold leading-none">{formatFullDate(date)}</h1>
             <span className="text-[16pt] font-semibold">{title}</span>
             <span className="ml-auto text-right text-[11pt] leading-tight">
-              {kind === "snack" ? `${snackNames.length} 名` : plan ? `${plan.length} 名` : ""}
+              {kind === "snack" ? `${snackNames.length} 名` : visiblePlan ? `${visiblePlan.length} 名` : ""}
             </span>
           </div>
 
