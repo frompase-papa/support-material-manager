@@ -67,12 +67,19 @@ body {
     margin: 10mm;
   }
 
-  #day-print-sheet {
+  #day-print-sheet,
+  .day-print-sheet {
     page: a3day;
   }
 
+  /* まとめて印刷：1日・1種類ごとに必ず新しい用紙へ（最後の1枚の後は白紙を出さない） */
+  .day-print-batch-item:not(:last-child) {
+    break-after: page;
+  }
+
   #week-print-sheet,
-  #day-print-sheet {
+  #day-print-sheet,
+  .day-print-sheet {
     margin: 0 !important;
     box-shadow: none !important;
     break-inside: avoid;

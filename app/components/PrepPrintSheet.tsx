@@ -47,16 +47,14 @@ function fontPt(count: number): number {
   return 18;
 }
 
-export function PrepPrintSheet({
+export function PrepPrintPage({
   kind,
   store,
   date,
-  onClose,
 }: {
   kind: PrepKind;
   store: AttendanceStore;
   date: Date;
-  onClose: () => void;
 }) {
   const dateKey = toDateKey(date);
 
@@ -114,38 +112,13 @@ export function PrepPrintSheet({
       }));
   }, [visiblePlan]);
 
-  if (typeof document === "undefined") return null;
-
   const title = kind === "snack" ? "おやつ確認表" : "帰りの送り出発（17じ・18じ）";
   const maxRows =
     kind === "snack" ? Math.ceil(snackNames.length / 2) : Math.max(0, ...columns.map((c) => c.kids.length));
   const pt = fontPt(maxRows);
 
-  return createPortal(
-    <div id="day-print-portal" className="fixed inset-0 z-50 overflow-auto bg-zinc-700/90 p-4">
-      <div className="mx-auto mb-4 flex max-w-[400mm] flex-wrap items-center gap-3 print:hidden">
-        <h2 className="text-lg font-bold text-white">{title}（A3横 印刷プレビュー）</h2>
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-zinc-100"
-          >
-            🖨 印刷する
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-white/60 px-4 py-2 text-sm font-medium text-white hover:bg-white/10"
-          >
-            閉じる
-          </button>
-        </div>
-      </div>
-      <p className="mx-auto mb-3 max-w-[400mm] text-xs text-white/80 print:hidden">
-        印刷の設定で用紙サイズを「A3」、倍率を「100%（既定）」にしてください。
-        {kind === "snack" && "「済」「OT」などの印は印刷しません。当日、実施してから貼ってください。"}
-      </p>
+  return (
+    <>
       {kind === "leave" && error && (
         <div className="mx-auto mb-3 max-w-[400mm] rounded-lg bg-amber-100 px-4 py-2 text-sm text-amber-900 print:hidden">
           ⚠ {error}
@@ -153,8 +126,8 @@ export function PrepPrintSheet({
       )}
 
       <div
-        id="day-print-sheet"
-        className="mx-auto bg-white text-black shadow-2xl print:shadow-none"
+        data-sheet="1"
+        className="day-print-sheet mx-auto bg-white text-black shadow-2xl print:shadow-none"
         style={{ width: `${SHEET_W_MM}mm`, height: `${SHEET_H_MM}mm` }}
       >
         <div className="flex h-full flex-col overflow-hidden">
@@ -211,6 +184,50 @@ export function PrepPrintSheet({
           )}
         </div>
       </div>
+    </>
+  );
+}
+
+export function PrepPrintSheet({
+  kind,
+  store,
+  date,
+  onClose,
+}: {
+  kind: PrepKind;
+  store: AttendanceStore;
+  date: Date;
+  onClose: () => void;
+}) {
+  if (typeof document === "undefined") return null;
+  const title = kind === "snack" ? "おやつ確認表" : "帰りの送り出発（17じ・18じ）";
+
+  return createPortal(
+    <div id="day-print-portal" className="fixed inset-0 z-50 overflow-auto bg-zinc-700/90 p-4">
+      <div className="mx-auto mb-4 flex max-w-[400mm] flex-wrap items-center gap-3 print:hidden">
+        <h2 className="text-lg font-bold text-white">{title}（A3横 印刷プレビュー）</h2>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-zinc-100"
+          >
+            🖨 印刷する
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-white/60 px-4 py-2 text-sm font-medium text-white hover:bg-white/10"
+          >
+            閉じる
+          </button>
+        </div>
+      </div>
+      <p className="mx-auto mb-3 max-w-[400mm] text-xs text-white/80 print:hidden">
+        印刷の設定で用紙サイズを「A3」、倍率を「100%（既定）」にしてください。
+        {kind === "snack" && "「済」「OT」などの印は印刷しません。当日、実施してから貼ってください。"}
+      </p>
+      <PrepPrintPage kind={kind} store={store} date={date} />
     </div>,
     document.body
   );

@@ -30,14 +30,12 @@ const MAX_TRIES = 12;
  * - 内容の量に合わせて自動で拡大・縮小し、1枚を使い切る
  * - 印刷時に白紙ページが出ないよう、body 直下（ポータル）に描画する
  */
-export function DayPrintSheet({
+export function DayPrintPage({
   store,
   date,
-  onClose,
 }: {
   store: AttendanceStore;
   date: Date;
-  onClose: () => void;
 }) {
   const { curriculum, tablet } = useMemo(() => {
     const items = store.getForDate(date);
@@ -105,43 +103,8 @@ export function DayPrintSheet({
     }
   }, [scale, curriculum, tablet]);
 
-  if (typeof document === "undefined") return null;
-
-  return createPortal(
-    <div
-      id="day-print-portal"
-      className="fixed inset-0 z-50 overflow-auto bg-zinc-700/90 p-4"
-    >
-      {/* 操作バー（印刷時は出さない） */}
-      <div className="mx-auto mb-4 flex max-w-[400mm] flex-wrap items-center gap-3 print:hidden">
-        <h2 className="text-lg font-bold text-white">
-          本日のカリキュラム・タブレット（A3横 印刷プレビュー）
-        </h2>
-        <span className="rounded bg-white/15 px-2 py-1 text-xs text-white">
-          表示倍率 {Math.round(scale * 100)}%
-        </span>
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-zinc-100"
-          >
-            🖨 印刷する
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-white/60 px-4 py-2 text-sm font-medium text-white hover:bg-white/10"
-          >
-            閉じる
-          </button>
-        </div>
-      </div>
-
-      <p className="mx-auto mb-3 max-w-[400mm] text-xs text-white/80 print:hidden">
-        印刷の設定で用紙サイズを「A3」、倍率を「100%（既定）」にしてください。A3が使えない場合は「PDFに保存」してA4→A3の拡大印刷でも使えます。
-      </p>
-
+  return (
+    <>
       {scale <= WARN_SCALE && (
         <div className="mx-auto mb-3 max-w-[400mm] rounded-lg bg-amber-100 px-4 py-2 text-xs text-amber-900 print:hidden">
           ⚠ 内容が多く、1枚に収めるとかなり小さくなります（表示倍率{" "}
@@ -151,8 +114,8 @@ export function DayPrintSheet({
 
       {/* A3横1枚ぶんの用紙（印刷時は実寸） */}
       <div
-        id="day-print-sheet"
-        className="mx-auto bg-white text-black shadow-2xl print:shadow-none"
+        data-sheet="1"
+        className="day-print-sheet mx-auto bg-white text-black shadow-2xl print:shadow-none"
         style={{ width: `${SHEET_W_MM}mm`, height: `${SHEET_H_MM}mm` }}
       >
         <div className="flex h-full flex-col overflow-hidden">
@@ -268,6 +231,54 @@ export function DayPrintSheet({
           )}
         </div>
       </div>
+    </>
+  );
+}
+
+export function DayPrintSheet({
+  store,
+  date,
+  onClose,
+}: {
+  store: AttendanceStore;
+  date: Date;
+  onClose: () => void;
+}) {
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div
+      id="day-print-portal"
+      className="fixed inset-0 z-50 overflow-auto bg-zinc-700/90 p-4"
+    >
+      {/* 操作バー（印刷時は出さない） */}
+      <div className="mx-auto mb-4 flex max-w-[400mm] flex-wrap items-center gap-3 print:hidden">
+        <h2 className="text-lg font-bold text-white">
+          本日のカリキュラム・タブレット（A3横 印刷プレビュー）
+        </h2>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-zinc-100"
+          >
+            🖨 印刷する
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-white/60 px-4 py-2 text-sm font-medium text-white hover:bg-white/10"
+          >
+            閉じる
+          </button>
+        </div>
+      </div>
+
+      <p className="mx-auto mb-3 max-w-[400mm] text-xs text-white/80 print:hidden">
+        印刷の設定で用紙サイズを「A3」、倍率を「100%（既定）」にしてください。A3が使えない場合は「PDFに保存」してA4→A3の拡大印刷でも使えます。
+      </p>
+
+      <DayPrintPage store={store} date={date} />
     </div>,
     document.body
   );
