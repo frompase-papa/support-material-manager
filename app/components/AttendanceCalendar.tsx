@@ -34,6 +34,7 @@ import { SupportProgramMasterPanel } from "@/app/components/SupportProgramMaster
 import { SupportProgramAssignment } from "@/app/components/SupportProgramAssignment";
 import { WeekPrintSheet } from "@/app/components/WeekPrintSheet";
 import { DayPrintSheet } from "@/app/components/DayPrintSheet";
+import { PrepDialog } from "@/app/components/PrepDialog";
 import {
   AssessmentSheetPanel,
   isSafeHttpUrl,
@@ -594,6 +595,7 @@ function DayView({
   const unattended = store.getUnattendedStudents(date);
   const isToday = isSameDay(date, today);
   const [printOpen, setPrintOpen] = useState(false);
+  const [prepOpen, setPrepOpen] = useState(false);
 
   return (
     <section>
@@ -635,6 +637,14 @@ function DayView({
             className="rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-800"
             aria-label="日付を選択"
           />
+          <button
+            type="button"
+            onClick={() => setPrepOpen(true)}
+            title="おやつ・カリキュラム／タブレット・17じ18じの3枚を、翌日ぶん準備します"
+            className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            📋 翌日準備
+          </button>
           <button
             type="button"
             onClick={() => setPrintOpen(true)}
@@ -689,6 +699,10 @@ function DayView({
           date={date}
           onClose={() => setPrintOpen(false)}
         />
+      )}
+
+      {prepOpen && (
+        <PrepDialog store={store} today={today} onClose={() => setPrepOpen(false)} />
       )}
 
       {unattended.length > 0 && (
