@@ -78,6 +78,70 @@ export function FloorBoard() {
 
   const count = (m: Material) => view.filter((v) => v.r.material === m).length;
 
+  // 見せ方：活動別（カリキュラム／タブレット）か、記録担当の職員別か
+  const [mode, setMode] = useState<"activity" | "staff">("activity");
+  const recorderCount = (name: string) => view.filter((v) => v.recorder === name).length;
+  // 職員別の列：在室職員 ＋ 在室でないが担当に入っている人 ＋ 未定
+  const staffColumns = useMemo(() => {
+    const names = [...staff];
+    for (const v of view) if (v.recorder && !names.includes(v.recorder)) names.push(v.recorder);
+    return names;
+  }, [staff, view]);
+  const unassigned = view.filter((v) => v.recorder === "");
+
+  const renderCard = (v: (typeof view)[number], withStaffView: boolean) => {
+    const { r, pickup, recorder } = v;
+    const other = oppositeMaterial(r.material);
+    const accent = r.material === "curriculum" ? GROUPS[0].card : GROUPS[1].card;
+    return (
+      <div key={r.student.id} className={`rounded-lg border-2 bg-white p-2 dark:bg-zinc-900 ${accent}`}>
+        <div className="flex items-start gap-2">
+          <div className="min-w-0">
+            <div className="break-words text-base font-bold">{r.student.name}</div>
+            <div className="text-xs text-zinc-500 dark:text-zinc-400">お迎え：{pickup || "未定"}</div>
+            {withStaffView && (
+              <span
+                className={`mt-0.5 inline-block rounded px-1.5 py-0.5 text-xs font-bold ${
+                  r.material === "curriculum"
+                    ? "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200"
+                    : "bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-200"
+                }`}
+              >
+                {MATERIAL_LABEL[r.material]}
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => store.setMaterial(r.student.id, date, other)}
+            className="ml-auto shrink-0 rounded-lg border border-zinc-300 bg-zinc-50 px-2.5 py-2 text-xs font-bold hover:bg-zinc-100 active:bg-zinc-200 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+          >
+            ⇄ {MATERIAL_LABEL[other]}へ
+          </button>
+        </div>
+        <label className="mt-1.5 flex items-center gap-2 text-xs font-bold text-zinc-600 dark:text-zinc-300">
+          記録担当
+          <select
+            value={recorder}
+            onChange={(e) => store.setRecorder(r.student.id, date, e.target.value)}
+            className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm font-medium dark:border-zinc-700 dark:bg-zinc-800"
+          >
+            {recorder === "" && <option value="">（未定）</option>}
+            {/* 保存済みの担当が、いま在室でなくなっていても消さずに残す */}
+            {recorder !== "" && !staff.includes(recorder) && (
+              <option value={recorder}>{recorder}（在室でない）</option>
+            )}
+            {staff.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+    );
+  };
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
       <header className="mb-4 space-y-3">
@@ -141,7 +205,35 @@ export function FloorBoard() {
               className="rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-900 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200"
             >
               {n}
+              {view.length > 0 && <span className="ml-1 text-emerald-700 dark:text-emerald-300">記録{recorderCount(n)}人</span>}
             </span>
+          ))}
+          {unassigned.length > 0 && (
+            <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+              担当未定 {unassigned.length}人
+            </span>
+          )}
+        </div>
+
+        <div className="inline-flex overflow-hidden rounded-lg border border-zinc-300 text-sm font-bold dark:border-zinc-700">
+          {(
+            [
+              ["activity", "活動別"],
+              ["staff", "職員別"],
+            ] as const
+          ).map(([m, label]) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              className={`px-4 py-2 ${
+                mode === m
+                  ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
+                  : "bg-white hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+              }`}
+            >
+              {label}
+            </button>
           ))}
         </div>
 
@@ -158,11 +250,10 @@ export function FloorBoard() {
         <div className="rounded-xl border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900">
           この日に来る生徒がいません。出席カレンダーにHUGの出席を取り込んでください。
         </div>
-      ) : (
+      ) : mode === "activity" ? (
         <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
           {GROUPS.map((g) => {
             const list = view.filter((v) => v.r.material === g.material);
-            const other = oppositeMaterial(g.material);
             return (
               <section
                 key={g.material}
@@ -174,47 +265,36 @@ export function FloorBoard() {
                 </h2>
                 <div className="min-h-24 space-y-2 p-2">
                   {list.length === 0 && <p className="p-2 text-xs text-zinc-400">いません</p>}
-                  {list.map(({ r, pickup, recorder }) => (
-                    <div
-                      key={r.student.id}
-                      className={`rounded-lg border-2 bg-white p-2 dark:bg-zinc-900 ${g.card}`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <div className="min-w-0">
-                          <div className="break-words text-base font-bold">{r.student.name}</div>
-                          <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                            お迎え：{pickup || "未定"}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => store.setMaterial(r.student.id, date, other)}
-                          className="ml-auto shrink-0 rounded-lg border border-zinc-300 bg-zinc-50 px-2.5 py-2 text-xs font-bold hover:bg-zinc-100 active:bg-zinc-200 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:bg-zinc-700"
-                        >
-                          ⇄ {MATERIAL_LABEL[other]}へ
-                        </button>
-                      </div>
-                      <label className="mt-1.5 flex items-center gap-2 text-xs font-bold text-zinc-600 dark:text-zinc-300">
-                        記録担当
-                        <select
-                          value={recorder}
-                          onChange={(e) => store.setRecorder(r.student.id, date, e.target.value)}
-                          className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-sm font-medium dark:border-zinc-700 dark:bg-zinc-800"
-                        >
-                          {recorder === "" && <option value="">（未定）</option>}
-                          {/* 保存済みの担当が、いま在室でなくなっていても消さずに残す */}
-                          {recorder !== "" && !staff.includes(recorder) && (
-                            <option value={recorder}>{recorder}（在室でない）</option>
-                          )}
-                          {staff.map((n) => (
-                            <option key={n} value={n}>
-                              {n}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                  ))}
+                  {list.map((v) => renderCard(v, false))}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[...staffColumns, ...(unassigned.length > 0 ? [""] : [])].map((name) => {
+            const list = view.filter((v) => v.recorder === name);
+            const cur = list.filter((v) => v.r.material === "curriculum").length;
+            return (
+              <section
+                key={name || "_unassigned"}
+                className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+              >
+                <h2
+                  className={`flex flex-wrap items-center gap-x-2 px-3 py-2 text-sm font-bold ${
+                    name ? "bg-emerald-700 text-white" : "bg-amber-600 text-white"
+                  }`}
+                >
+                  {name || "担当未定"}
+                  <span className="ml-auto rounded-full bg-white/25 px-2 py-0.5 text-xs">{list.length}人</span>
+                  <span className="basis-full text-xs font-normal opacity-90">
+                    カリキュラム {cur}人 ／ タブレット {list.length - cur}人
+                  </span>
+                </h2>
+                <div className="min-h-16 space-y-2 p-2">
+                  {list.length === 0 && <p className="p-2 text-xs text-zinc-400">記録の担当はいません</p>}
+                  {list.map((v) => renderCard(v, true))}
                 </div>
               </section>
             );
