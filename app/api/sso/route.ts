@@ -3,7 +3,7 @@
 // データの保護は「ログインしていること」（Firestoreルール request.auth != null）なので、
 // ここでログインさせられた人も、これまで通りのデータが読み書きできる。
 
-import { getAdminAuth } from "@/app/lib/firebaseAdmin";
+import { createCustomToken } from "@/app/lib/firebaseAdmin";
 import { todayJST, verifySsoToken } from "@/app/lib/sso";
 
 export const runtime = "nodejs";
@@ -17,16 +17,14 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: "通行証が正しくないか、期限が切れています" }, { status: 401 });
   }
   try {
-    const auth = await getAdminAuth();
-    if (!auth) {
-      return Response.json({ ok: false, error: "server not configured (FIREBASE_SERVICE_ACCOUNT)" }, { status: 503 });
-    }
-    // day: ログインの有効な日。日付が変わったら、画面側（AuthProvider）がログアウトさせる
-    const customToken = await auth.createCustomToken(`staff-${claims.staffId}`, {
+    const customToken = createCustomToken(`staff-${claims.staffId}`, {
       sso: true,
       day: todayJST(),
       name: claims.name,
     });
+    if (!customToken) {
+      return Response.json({ ok: false, error: "server not configured (FIREBASE_SERVICE_ACCOUNT)" }, { status: 503 });
+    }
     return Response.json({ ok: true, customToken });
   } catch (e) {
     // 失敗しても画面は「メールアドレスでログイン」へ案内できるよう、理由をJSONで返す

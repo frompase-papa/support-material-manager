@@ -5,6 +5,7 @@
 // 環境変数 FIREBASE_SERVICE_ACCOUNT に、Firebaseの
 // 「サービスアカウント秘密鍵JSON」を1行の文字列として設定する。
 
+import { createSign } from "node:crypto";
 import {
   initializeApp,
   getApps,
@@ -52,13 +53,26 @@ export function getAdminDb(): Firestore | null {
 }
 
 /**
- * Admin用 Auth（ログインの通行証＝カスタムトークンを作るのに使う）。未設定なら null。
- * firebase-admin/auth は、ここで先頭から読み込むと、この部品を使う他のAPI（出欠の受け口など）まで
- * 巻き込んで止めてしまったことがあるため、使うときだけ読み込む。
+ * ログインの通行証（カスタムトークン）を作る。
+ * firebase-admin/auth は、本番で「Failed to load external module」になり読み込めないことがあったため、
+ * 使わずに、サービスアカウントの秘密鍵で署名したJWT（RS256）を自前で作る。Firebaseのカスタムトークンの正式な形式。
+ * サービスアカウント未設定なら null。
  */
-export async function getAdminAuth() {
-  const app = getAdminApp();
-  if (!app) return null;
-  const { getAuth } = await import("firebase-admin/auth");
-  return getAuth(app);
+export function createCustomToken(uid: string, claims: Record<string, unknown>): string | null {
+  const sa = loadServiceAccount();
+  if (!sa?.private_key || !sa.client_email) return null;
+  const b64 = (v: unknown) => Buffer.from(JSON.stringify(v)).toString("base64url");
+  const now = Math.floor(Date.now() / 1000);
+  const head = b64({ alg: "RS256", typ: "JWT" });
+  const body = b64({
+    iss: sa.client_email,
+    sub: sa.client_email,
+    aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit",
+    iat: now,
+    exp: now + 3600,
+    uid,
+    claims,
+  });
+  const sig = createSign("RSA-SHA256").update(`${head}.${body}`).sign(sa.private_key).toString("base64url");
+  return `${head}.${body}.${sig}`;
 }
