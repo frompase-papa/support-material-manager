@@ -66,6 +66,8 @@ export interface PersistedState {
    * 決めていない生徒は入れない（お迎え担当が初期値）。
    */
   floorRecorders?: Record<string, string>;
+  /** 記録をしない職員（ドライバー・パートなど）の名前。日付に関係なく続く設定 */
+  floorNonRecorders?: string[];
 }
 
 
@@ -126,5 +128,6 @@ export function mergePreferNonEmpty(
     supportAdditions: pick(local.supportAdditions ?? {}, cloud.supportAdditions),
     studentStudy: pick(local.studentStudy ?? {}, cloud.studentStudy),
     floorRecorders: pick(local.floorRecorders ?? {}, cloud.floorRecorders),
+    floorNonRecorders: pick(local.floorNonRecorders ?? [], cloud.floorNonRecorders),
   };
 }

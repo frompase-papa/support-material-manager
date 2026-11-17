@@ -62,7 +62,10 @@ export function FloorBoard() {
   }, [dateKey]);
 
   const { getForDate, getRecorder } = store;
-  const staff = useMemo(() => plan?.staff ?? [], [plan]);
+  const { nonRecorders } = store;
+  const allStaff = useMemo(() => plan?.staff ?? [], [plan]);
+  // 記録をしない職員は、担当の選択肢・初期値・職員別の列から外す
+  const staff = useMemo(() => allStaff.filter((n) => !nonRecorders.includes(n)), [allStaff, nonRecorders]);
 
   const view = useMemo(
     () =>
@@ -129,7 +132,9 @@ export function FloorBoard() {
             {recorder === "" && <option value="">（未定）</option>}
             {/* 保存済みの担当が、いま在室でなくなっていても消さずに残す */}
             {recorder !== "" && !staff.includes(recorder) && (
-              <option value={recorder}>{recorder}（在室でない）</option>
+              <option value={recorder}>
+                {recorder}（{allStaff.includes(recorder) ? "記録しない人" : "在室でない"}）
+              </option>
             )}
             {staff.map((n) => (
               <option key={n} value={n}>
@@ -191,7 +196,7 @@ export function FloorBoard() {
 
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300">
-            在室職員 {plan ? `${staff.length}人` : ""}
+            在室職員 {plan ? `${allStaff.length}人（記録をする人 ${staff.length}人）` : ""}
           </span>
           {!plan && !error && <span className="text-xs text-zinc-400">送迎アプリから取得中…</span>}
           {plan && staff.length === 0 && (
@@ -199,15 +204,34 @@ export function FloorBoard() {
               この日の確定した出勤がありません（送迎アプリのシフト表で確定してください）
             </span>
           )}
-          {staff.map((n) => (
-            <span
-              key={n}
-              className="rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-900 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200"
-            >
-              {n}
-              {view.length > 0 && <span className="ml-1 text-emerald-700 dark:text-emerald-300">記録{recorderCount(n)}人</span>}
-            </span>
-          ))}
+          {allStaff.map((n) => {
+            const records = !nonRecorders.includes(n);
+            return (
+              <span
+                key={n}
+                className={`inline-flex items-center gap-1 rounded-full border py-0.5 pl-2 pr-1 text-xs font-bold ${
+                  records
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200"
+                    : "border-zinc-300 bg-zinc-100 text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400"
+                }`}
+              >
+                {n}
+                {records ? (
+                  view.length > 0 && <span className="text-emerald-700 dark:text-emerald-300">記録{recorderCount(n)}人</span>
+                ) : (
+                  <span>記録しない</span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => store.setStaffRecords(n, !records)}
+                  title={records ? "この人は記録をしない（ドライバー・パートなど）" : "この人も記録をする"}
+                  className="rounded-full border border-current px-1.5 py-0.5 font-medium hover:bg-white/60 dark:hover:bg-black/20"
+                >
+                  {records ? "記録しない" : "記録する"}
+                </button>
+              </span>
+            );
+          })}
           {unassigned.length > 0 && (
             <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
               担当未定 {unassigned.length}人

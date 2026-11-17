@@ -147,6 +147,9 @@ export interface AttendanceStore {
   // 支援進行ボードの記録担当（職員名。未設定なら ""）
   getRecorder: (studentId: string, date: Date) => string;
   setRecorder: (studentId: string, date: Date, staffName: string) => void;
+  /** 記録をしない職員の名前（日付に関係なく続く設定） */
+  nonRecorders: string[];
+  setStaffRecords: (staffName: string, records: boolean) => void;
 }
 
 function monthKey(year: number, month: number): string {
@@ -182,6 +185,8 @@ export function useAttendanceStore(): AttendanceStore {
   // 支援進行ボードの記録担当。recordId -> 職員名
   const [floorRecorders, setFloorRecorders] = useState<Record<string, string>>({});
 
+  const [nonRecorders, setNonRecorders] = useState<string[]>([]);
+
   const clientIdRef = useRef<string>("");
   if (!clientIdRef.current) clientIdRef.current = makeClientId();
   const lastSyncedRef = useRef<string>("");
@@ -208,6 +213,7 @@ export function useAttendanceStore(): AttendanceStore {
     setSupportPrograms(d.supportPrograms ?? []);
     setSupportAssignments(d.supportAssignments ?? {});
     setFloorRecorders(d.floorRecorders ?? {});
+    setNonRecorders(d.floorNonRecorders ?? []);
   }, []);
 
   // Firestore からリアルタイム購読（他PCの変更も自動反映）
@@ -276,6 +282,7 @@ export function useAttendanceStore(): AttendanceStore {
       supportAdditions,
       studentStudy,
       floorRecorders,
+      floorNonRecorders: nonRecorders,
     }),
     [
       typeById,
@@ -294,6 +301,7 @@ export function useAttendanceStore(): AttendanceStore {
       supportAdditions,
       studentStudy,
       floorRecorders,
+      nonRecorders,
     ]
   );
 
@@ -830,6 +838,13 @@ export function useAttendanceStore(): AttendanceStore {
     []
   );
 
+  const setStaffRecords = useCallback((staffName: string, records: boolean) => {
+    setNonRecorders((prev) => {
+      const rest = prev.filter((n) => n !== staffName);
+      return records ? rest : [...rest, staffName];
+    });
+  }, []);
+
   const setAssessmentUrl = useCallback((url: string) => {
     setAssessmentUrlState(url.trim());
   }, []);
@@ -884,5 +899,7 @@ export function useAttendanceStore(): AttendanceStore {
     removeSupportAssignment,
     getRecorder,
     setRecorder,
+    nonRecorders,
+    setStaffRecords,
   };
 }
