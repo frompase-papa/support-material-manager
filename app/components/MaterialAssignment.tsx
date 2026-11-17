@@ -40,11 +40,23 @@ export function MaterialAssignment({
         <span className="text-xs font-semibold text-amber-800 dark:text-amber-300">
           教材選定（{assigned.length}/{max}）
         </span>
-        {!readOnly && (
-          <span className="text-[10px] text-amber-700/70 dark:text-amber-400/70">
-            {study.hasSST ? `SSTあり・${max}枚（SSTを含む）` : `SSTなし・${max}枚（自由問題）`}
-          </span>
-        )}
+        <span
+          className={`rounded px-2 py-0.5 text-sm font-bold ${
+            !store.hasStudySetting(studentId)
+              ? "bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+              : study.hasSST
+                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+                : "bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-100"
+          }`}
+          title={
+            store.hasStudySetting(studentId)
+              ? "送迎アプリの児童管理で決めた設定です"
+              : "送迎アプリから設定が届いていないため、今までどおり「SSTあり・3枚」で扱っています"
+          }
+        >
+          {study.hasSST ? `SSTあり・${max}枚` : `SSTなし・${max}枚`}
+          {!store.hasStudySetting(studentId) && "（未受信）"}
+        </span>
       </div>
 
       {assigned.length === 0 ? (

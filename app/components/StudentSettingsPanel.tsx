@@ -14,11 +14,13 @@ import type { StudentStudy } from "@/app/lib/teachingMaterials";
 export function StudentSettingsPanel({
   students,
   getStudy,
+  hasStudySetting,
   onChangeType,
   onClose,
 }: {
   students: Student[];
   getStudy: (studentId: string) => StudentStudy;
+  hasStudySetting: (studentId: string) => boolean;
   onChangeType: (studentId: string, type: StudentType) => void;
   onClose: () => void;
 }) {
@@ -75,6 +77,7 @@ export function StudentSettingsPanel({
                 <span className="font-medium">{s.name}</span>
                 <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
                   {getStudy(s.id).hasSST ? "SSTあり" : "SSTなし"} / {getStudy(s.id).printCount}枚
+                  {!hasStudySetting(s.id) && "（未受信）"}
                 </span>
                 {s.grade && (
                   <span className="text-xs text-zinc-400">{s.grade}</span>

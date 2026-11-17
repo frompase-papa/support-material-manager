@@ -90,6 +90,8 @@ export interface AttendanceStore {
   setStudentType: (studentId: string, type: StudentType) => void;
   /** 生徒のSSTの有無・プリント枚数（送迎アプリの設定。未設定なら「SSTあり・3枚」） */
   getStudy: (studentId: string) => StudentStudy;
+  /** 送迎アプリから、その生徒のSST・枚数が届いているか（届いていなければ getStudy は既定の「SSTあり・3枚」） */
+  hasStudySetting: (studentId: string) => boolean;
   setMaterial: (studentId: string, date: Date, material: Material) => void;
   clearMaterial: (studentId: string, date: Date) => void;
   addAttendance: (studentId: string, date: Date) => void;
@@ -900,6 +902,7 @@ export function useAttendanceStore(): AttendanceStore {
     getUnattendedStudents,
     setStudentType,
     getStudy: (studentId: string) => studyOf(studentStudy, studentId),
+    hasStudySetting: (studentId: string) => studentId in studentStudy,
     setMaterial,
     clearMaterial,
     addAttendance,
