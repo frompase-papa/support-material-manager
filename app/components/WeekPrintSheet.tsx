@@ -7,6 +7,7 @@ import { WEEKDAY_LABELS, formatFullDate } from "@/app/lib/date";
 import {
   TM_TYPE_LABEL,
   type TeachingMaterial,
+  studyLabel,
 } from "@/app/lib/teachingMaterials";
 
 /**
@@ -29,7 +30,7 @@ const MAX_TRIES = 12;
 type DayColumn = {
   day: Date;
   /** カリキュラムの生徒（教材選定の対象） */
-  curriculum: { name: string; grade?: string; materials: TeachingMaterial[] }[];
+  curriculum: { name: string; grade?: string; study: string; materials: TeachingMaterial[] }[];
   /** タブレットの生徒（名前のみ） */
   tablet: string[];
 };
@@ -68,6 +69,7 @@ export function WeekPrintSheet({
             .map((item) => ({
               name: item.student.name,
               grade: item.student.grade,
+              study: studyLabel(store.getStudy(item.student.id)),
               materials: store
                 .getAssignedMaterialIds(item.student.id, day)
                 .map((id) => store.getMaterialById(id))
@@ -236,6 +238,9 @@ export function WeekPrintSheet({
                                     {row.grade}
                                   </span>
                                 )}
+                                <span className="ml-1 whitespace-nowrap rounded-sm border border-black px-0.5 text-[7pt] font-bold">
+                                  {row.study}
+                                </span>
                               </div>
 
                               {row.materials.length > 0 && (
