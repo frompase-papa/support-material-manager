@@ -19,6 +19,7 @@ import { normalizeName } from "@/app/lib/nameMatch";
 type Plan = {
   pickup: Map<string, string>; // 正規化した児童名 -> お迎え担当
   staff: string[]; // 在室職員
+  away: Map<string, string>; // 職員名 -> 予定で席を外す時間帯
 };
 
 const GROUPS: { material: Material; head: string; card: string }[] = [
@@ -50,8 +51,10 @@ export function FloorBoard() {
         for (const c of json.children as { name: string; pickupStaffName?: string }[]) {
           if (c.pickupStaffName) pickup.set(normalizeName(c.name), c.pickupStaffName);
         }
-        const staff = ((json.staff ?? []) as { name: string }[]).map((s) => s.name);
-        setLoaded({ dateKey, plan: { pickup, staff }, error: "" });
+        const rows = (json.staff ?? []) as { name: string; away?: string }[];
+        const staff = rows.map((s) => s.name);
+        const away = new Map(rows.filter((s) => s.away).map((s) => [s.name, s.away as string]));
+        setLoaded({ dateKey, plan: { pickup, staff, away }, error: "" });
       })
       .catch(() => {
         if (!cancelled) fail("送迎アプリの情報を取得できませんでした。");
@@ -217,6 +220,9 @@ export function FloorBoard() {
                 }`}
               >
                 {n}
+                {plan?.away.get(n) && (
+                  <span className="font-normal text-zinc-500 dark:text-zinc-400">（{plan.away.get(n)}は不在）</span>
+                )}
                 {records ? (
                   view.length > 0 && <span className="text-emerald-700 dark:text-emerald-300">記録{recorderCount(n)}人</span>
                 ) : (
