@@ -143,6 +143,10 @@ export interface AttendanceStore {
     date: Date,
     programId: string
   ) => void;
+
+  // 支援進行ボードの記録担当（職員名。未設定なら ""）
+  getRecorder: (studentId: string, date: Date) => string;
+  setRecorder: (studentId: string, date: Date, staffName: string) => void;
 }
 
 function monthKey(year: number, month: number): string {
@@ -175,6 +179,9 @@ export function useAttendanceStore(): AttendanceStore {
     Record<string, string[]>
   >({});
 
+  // 支援進行ボードの記録担当。recordId -> 職員名
+  const [floorRecorders, setFloorRecorders] = useState<Record<string, string>>({});
+
   const clientIdRef = useRef<string>("");
   if (!clientIdRef.current) clientIdRef.current = makeClientId();
   const lastSyncedRef = useRef<string>("");
@@ -200,6 +207,7 @@ export function useAttendanceStore(): AttendanceStore {
     setAssessmentUrlState(d.assessmentUrl ?? "");
     setSupportPrograms(d.supportPrograms ?? []);
     setSupportAssignments(d.supportAssignments ?? {});
+    setFloorRecorders(d.floorRecorders ?? {});
   }, []);
 
   // Firestore からリアルタイム購読（他PCの変更も自動反映）
@@ -267,6 +275,7 @@ export function useAttendanceStore(): AttendanceStore {
       supportAbsences,
       supportAdditions,
       studentStudy,
+      floorRecorders,
     }),
     [
       typeById,
@@ -284,6 +293,7 @@ export function useAttendanceStore(): AttendanceStore {
       supportAbsences,
       supportAdditions,
       studentStudy,
+      floorRecorders,
     ]
   );
 
@@ -801,6 +811,25 @@ export function useAttendanceStore(): AttendanceStore {
   );
 
   // ---- カリキュラムアセスメントシートのURL ----
+  const getRecorder = useCallback(
+    (studentId: string, date: Date) =>
+      floorRecorders[makeRecordId(studentId, toDateKey(date))] ?? "",
+    [floorRecorders]
+  );
+
+  const setRecorder = useCallback(
+    (studentId: string, date: Date, staffName: string) => {
+      const id = makeRecordId(studentId, toDateKey(date));
+      setFloorRecorders((prev) => {
+        const next = { ...prev };
+        if (staffName) next[id] = staffName;
+        else delete next[id];
+        return next;
+      });
+    },
+    []
+  );
+
   const setAssessmentUrl = useCallback((url: string) => {
     setAssessmentUrlState(url.trim());
   }, []);
@@ -853,5 +882,7 @@ export function useAttendanceStore(): AttendanceStore {
     getAssignedSupportIds,
     addSupportAssignment,
     removeSupportAssignment,
+    getRecorder,
+    setRecorder,
   };
 }

@@ -128,6 +128,12 @@ export default function AttendanceCalendar() {
             >
               📊 学習状況
             </Link>
+            <Link
+              href="/floor"
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+            >
+              🧭 支援進行ボード
+            </Link>
             <button
               type="button"
               onClick={() => setImportOpen(true)}

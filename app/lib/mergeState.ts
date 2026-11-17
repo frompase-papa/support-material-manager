@@ -61,6 +61,11 @@ export interface PersistedState {
    * 画面側は読むだけ（transportAbsences と同じく、送迎アプリを正とする）。
    */
   studentStudy?: Record<string, StudentStudy>;
+  /**
+   * 支援進行ボードの記録担当。recordId（児童名_日付）-> 職員名。
+   * 決めていない生徒は入れない（お迎え担当が初期値）。
+   */
+  floorRecorders?: Record<string, string>;
 }
 
 
@@ -120,5 +125,6 @@ export function mergePreferNonEmpty(
     supportAbsences: pick(local.supportAbsences ?? {}, cloud.supportAbsences),
     supportAdditions: pick(local.supportAdditions ?? {}, cloud.supportAdditions),
     studentStudy: pick(local.studentStudy ?? {}, cloud.studentStudy),
+    floorRecorders: pick(local.floorRecorders ?? {}, cloud.floorRecorders),
   };
 }
