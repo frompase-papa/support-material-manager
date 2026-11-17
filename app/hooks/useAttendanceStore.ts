@@ -194,6 +194,10 @@ export function useAttendanceStore(): AttendanceStore {
   // 利用者の意思として保存してよい（受け取れていないうちは消さない）。
   const loadedFromCloudRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 保存していない変更がある間（保存待ち〜保存中）は true。
+  // この間にクラウドから古い内容の通知が届いても、押したばかりの変更を上書きしないようにする
+  const dirtyRef = useRef(false);
+  const saveSeqRef = useRef(0);
   const [localBackupAvailable, setLocalBackupAvailable] = useState(false);
 
   const applyData = useCallback((d: Partial<PersistedState>) => {
@@ -226,7 +230,7 @@ export function useAttendanceStore(): AttendanceStore {
         const json = snap.exists()
           ? (snap.data().json as string | undefined)
           : undefined;
-        if (json && json !== lastSyncedRef.current) {
+        if (json && json !== lastSyncedRef.current && !dirtyRef.current) {
           lastSyncedRef.current = json;
           try {
             applyData(JSON.parse(json) as Partial<PersistedState>);
@@ -309,8 +313,13 @@ export function useAttendanceStore(): AttendanceStore {
   useEffect(() => {
     if (!hydrated) return;
     const serialized = JSON.stringify(currentData);
-    if (serialized === lastSyncedRef.current) return;
+    if (serialized === lastSyncedRef.current) {
+      dirtyRef.current = false; // 変更が元に戻った＝未保存は無い
+      return;
+    }
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    dirtyRef.current = true;
+    const seq = ++saveSeqRef.current;
     saveTimerRef.current = setTimeout(() => {
       const localData = currentData;
       const ref = doc(db, "workspace", WORKSPACE_ID);
@@ -346,12 +355,16 @@ export function useAttendanceStore(): AttendanceStore {
         return { merged, mergedJson };
       })
         .then(({ merged, mergedJson }) => {
+          // 保存中にさらに変更していたら、そちらの保存が終わるまで「未保存」のまま
+          if (seq !== saveSeqRef.current) return;
           lastSyncedRef.current = mergedJson;
+          dirtyRef.current = false;
           // クラウド側にしか無かったデータが補完された場合は、ローカルにも反映
           if (mergedJson !== serialized) applyData(merged);
         })
         .catch(() => {
           /* 保存失敗（オフライン等）は次の変更時に再送される */
+          if (seq === saveSeqRef.current) dirtyRef.current = false;
         });
     }, 700);
     return () => {
