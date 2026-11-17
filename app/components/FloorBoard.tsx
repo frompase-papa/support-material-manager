@@ -72,11 +72,14 @@ export function FloorBoard() {
       getForDate(date).map((r) => {
         const pickup = plan?.pickup.get(normalizeName(r.student.name)) ?? "";
         const saved = getRecorder(r.student.id, date);
-        // 保存済みの担当を優先。無ければお迎え担当（在室している人のときだけ）
-        const recorder = saved || (staff.includes(pickup) ? pickup : "");
+        // 保存済みの担当を優先。無ければお迎え担当（在室している人のときだけ）。
+        // 「記録しない」にした人は、前に担当に選んでいても外れる（保存した内容は残すので、
+        // 「記録する」に戻せば元の担当に戻る）
+        const savedValid = saved !== "" && !nonRecorders.includes(saved);
+        const recorder = savedValid ? saved : staff.includes(pickup) ? pickup : "";
         return { r, pickup, recorder };
       }),
-    [getForDate, getRecorder, date, plan, staff]
+    [getForDate, getRecorder, date, plan, staff, nonRecorders]
   );
 
   const count = (m: Material) => view.filter((v) => v.r.material === m).length;
@@ -132,9 +135,7 @@ export function FloorBoard() {
             {recorder === "" && <option value="">（未定）</option>}
             {/* 保存済みの担当が、いま在室でなくなっていても消さずに残す */}
             {recorder !== "" && !staff.includes(recorder) && (
-              <option value={recorder}>
-                {recorder}（{allStaff.includes(recorder) ? "記録しない人" : "在室でない"}）
-              </option>
+              <option value={recorder}>{recorder}（在室でない）</option>
             )}
             {staff.map((n) => (
               <option key={n} value={n}>
