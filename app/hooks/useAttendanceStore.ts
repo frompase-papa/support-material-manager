@@ -169,8 +169,10 @@ export function useAttendanceStore(): AttendanceStore {
   // この画面で「休み」「出席を追加」にした児童（送迎アプリの同期では消えない。送迎アプリの内容より優先）
   const [supportAbsences, setSupportAbsences] = useState<Record<string, string[]>>({});
   const [supportAdditions, setSupportAdditions] = useState<Record<string, string[]>>({});
-  // 送迎アプリの児童管理で決めた、生徒ごとのSSTの有無・プリント枚数（送迎アプリからのみ書き込まれる）
+  // 送迎アプリの児童管理で決めた、生徒ごとのSSTの有無・プリント枚数（送迎アプリからのみ書き込まれる）。
+  // 画面の共有データ（json 欄）とは別の studentStudy 欄から読むだけで、画面からは保存しない
   const [studentStudy, setStudentStudy] = useState<Record<string, StudentStudy>>({});
+  const lastStudyRef = useRef<string>("");
   const [materials, setMaterials] = useState<TeachingMaterial[]>(
     DEFAULT_TEACHING_MATERIALS
   );
@@ -209,7 +211,6 @@ export function useAttendanceStore(): AttendanceStore {
     setTransportAdditions(d.transportAdditions ?? {});
     setSupportAbsences(d.supportAbsences ?? {});
     setSupportAdditions(d.supportAdditions ?? {});
-    setStudentStudy(d.studentStudy ?? {});
     if (d.materials) setMaterials(d.materials);
     setAssignments(d.assignments ?? {});
     setNotes(d.notes ?? {});
@@ -230,6 +231,25 @@ export function useAttendanceStore(): AttendanceStore {
         const json = snap.exists()
           ? (snap.data().json as string | undefined)
           : undefined;
+        // SST・枚数は別の欄。保存待ちかどうかに関係なく、届いたらすぐ出す。
+        // （まだ別の欄に移っていないときは、以前の json 欄の中の分を使う）
+        const studyRaw = snap.exists() ? snap.data().studentStudy : undefined;
+        let studyStr = typeof studyRaw === "string" ? studyRaw : "";
+        if (!studyStr && json) {
+          try {
+            studyStr = JSON.stringify((JSON.parse(json) as Partial<PersistedState>).studentStudy ?? {});
+          } catch {
+            /* 壊れたデータは無視 */
+          }
+        }
+        if (studyStr && studyStr !== lastStudyRef.current) {
+          try {
+            setStudentStudy(JSON.parse(studyStr) as Record<string, StudentStudy>);
+            lastStudyRef.current = studyStr;
+          } catch {
+            /* 壊れたデータは無視 */
+          }
+        }
         if (json && json !== lastSyncedRef.current && !dirtyRef.current) {
           lastSyncedRef.current = json;
           try {
@@ -284,7 +304,6 @@ export function useAttendanceStore(): AttendanceStore {
       transportAdditions,
       supportAbsences,
       supportAdditions,
-      studentStudy,
       floorRecorders,
       floorNonRecorders: nonRecorders,
     }),
@@ -303,7 +322,6 @@ export function useAttendanceStore(): AttendanceStore {
       transportAdditions,
       supportAbsences,
       supportAdditions,
-      studentStudy,
       floorRecorders,
       nonRecorders,
     ]

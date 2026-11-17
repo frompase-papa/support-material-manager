@@ -57,8 +57,8 @@ export interface PersistedState {
   /**
    * 生徒ごとの学習設定（SSTの有無・プリント枚数）。児童名 -> 設定
    *
-   * 送迎アプリの児童管理で決めた内容が、送迎アプリから /api/study-settings で届く。
-   * 画面側は読むだけ（transportAbsences と同じく、送迎アプリを正とする）。
+   * 以前はここに保存していたが、画面の保存で消されるため、今は workspace ドキュメントの
+   * 別の欄（studentStudy）に置いている。ここは古いデータを読むときのためだけに残す。
    */
   studentStudy?: Record<string, StudentStudy>;
   /**
@@ -126,7 +126,6 @@ export function mergePreferNonEmpty(
     transportAdditions: pick(local.transportAdditions, cloud.transportAdditions),
     supportAbsences: pick(local.supportAbsences ?? {}, cloud.supportAbsences),
     supportAdditions: pick(local.supportAdditions ?? {}, cloud.supportAdditions),
-    studentStudy: pick(local.studentStudy ?? {}, cloud.studentStudy),
     floorRecorders: pick(local.floorRecorders ?? {}, cloud.floorRecorders),
     floorNonRecorders: pick(local.floorNonRecorders ?? [], cloud.floorNonRecorders),
   };

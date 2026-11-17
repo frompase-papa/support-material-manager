@@ -1,8 +1,13 @@
 // 送迎管理アプリから「生徒ごとの学習設定（SSTの有無・プリント枚数）」を受け取って保存するAPI。
 //
 // 送迎アプリの児童管理で設定を変えると、ここが呼ばれる。設定は送迎アプリを正とするので、
-// 届いた生徒の分は毎回まるごと置き換える。保存先は workspace ドキュメントの studentStudy
-// （児童名 -> { hasSST, printCount }）。月の取込や画面の保存で消えないよう、出欠と同じく専用の欄にしてある。
+// 届いた生徒の分は毎回まるごと置き換える。保存先は workspace ドキュメントの studentStudy 欄
+// （児童名 -> { hasSST, printCount } を JSON 文字列にしたもの）。
+//
+// ★ 画面の共有データ（json 欄）の中には入れないこと。
+//   画面は操作のたびに json 欄を「自分が持っている内容」で書き直すので、
+//   開きっぱなしの古い画面（この設定を知らない版）や保存待ちの画面が、届いた設定を消してしまっていた。
+//   別の欄にしておけば、画面の保存では触られない。
 //
 // 認証: ヘッダー x-api-key が SHIFT_ATTENDANCE_API_KEY と一致すること（/api/absence と同じ合言葉）。
 
@@ -99,10 +104,18 @@ export async function POST(req: Request) {
       if (!byNormalized.has(k)) byNormalized.set(k, n);
     }
 
-    // 届いた生徒の分だけ置き換える（届かなかった生徒の設定は残す）
-    const next: Record<string, StudentStudy> = {
-      ...((data.studentStudy as Record<string, StudentStudy> | undefined) ?? {}),
-    };
+    // 届いた生徒の分だけ置き換える（届かなかった生徒の設定は残す）。
+    // 以前 json 欄の中に入れていた分があれば、それも引き継ぐ
+    let saved: Record<string, StudentStudy> = (data.studentStudy as Record<string, StudentStudy> | undefined) ?? {};
+    const savedRaw = snap.exists ? snap.get("studentStudy") : null;
+    if (typeof savedRaw === "string") {
+      try {
+        saved = JSON.parse(savedRaw) as Record<string, StudentStudy>;
+      } catch {
+        /* 読めなければ届いた分だけで作り直す */
+      }
+    }
+    const next: Record<string, StudentStudy> = { ...saved };
     const unmatched: string[] = [];
     for (const { name, study } of incoming) {
       const hit = byNormalized.get(normalizeName(name));
@@ -110,7 +123,7 @@ export async function POST(req: Request) {
       next[hit ?? name] = study;
     }
 
-    tx.set(ref, { json: JSON.stringify({ ...data, studentStudy: next }) }, { merge: true });
+    tx.set(ref, { studentStudy: JSON.stringify(next) }, { merge: true });
     return { ok: true as const, count: incoming.length, unmatched };
   });
 

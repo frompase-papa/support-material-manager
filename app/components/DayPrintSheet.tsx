@@ -7,6 +7,7 @@ import { formatFullDate } from "@/app/lib/date";
 import {
   TM_TYPE_LABEL,
   type TeachingMaterial,
+  studyLabel,
 } from "@/app/lib/teachingMaterials";
 
 /**
@@ -46,6 +47,7 @@ export function DayPrintPage({
           id: item.record.id,
           name: item.student.name,
           grade: item.student.grade,
+          study: studyLabel(store.getStudy(item.student.id)),
           materials: store
             .getAssignedMaterialIds(item.student.id, date)
             .map((id) => store.getMaterialById(id))
@@ -172,6 +174,9 @@ export function DayPrintPage({
                                 {row.grade}
                               </span>
                             )}
+                            <span className="ml-2 whitespace-nowrap rounded border border-black px-1 text-[11pt] font-bold">
+                              {row.study}
+                            </span>
                           </div>
                           {row.materials.length > 0 && (
                             <ol>

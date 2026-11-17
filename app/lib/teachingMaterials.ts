@@ -43,6 +43,11 @@ export function studyOf(map: Record<string, StudentStudy>, studentId: string): S
   return map[studentId] ?? DEFAULT_STUDY;
 }
 
+/** 画面や印刷に出す短い書き方（例「SSTなし・2枚」） */
+export function studyLabel(study: StudentStudy): string {
+  return `${study.hasSST ? "SSTあり" : "SSTなし"}・${study.printCount}枚`;
+}
+
 /** 種別バッジの色クラス */
 export function tmTypeBadgeClass(type: TeachingMaterialType): string {
   switch (type) {

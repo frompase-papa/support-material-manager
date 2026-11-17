@@ -6,6 +6,7 @@ import { useAttendanceStore } from "@/app/hooks/useAttendanceStore";
 import { MATERIAL_LABEL, oppositeMaterial, type Material } from "@/app/lib/attendance";
 import { addDays, formatFullDate, startOfDay, toDateKey } from "@/app/lib/date";
 import { normalizeName } from "@/app/lib/nameMatch";
+import { studyLabel } from "@/app/lib/teachingMaterials";
 
 /**
  * 支援進行ボード。学習室で「誰がカリキュラム／タブレットか」「誰が記録を担当するか」を見渡す。
@@ -108,6 +109,9 @@ export function FloorBoard() {
           <div className="min-w-0">
             <div className="break-words text-base font-bold">{r.student.name}</div>
             <div className="text-xs text-zinc-500 dark:text-zinc-400">お迎え：{pickup || "未定"}</div>
+            {r.material === "curriculum" && (
+              <StudyBadge label={studyLabel(store.getStudy(r.student.id))} hasSST={store.getStudy(r.student.id).hasSST} />
+            )}
             {withStaffView && (
               <span
                 className={`mt-0.5 inline-block rounded px-1.5 py-0.5 text-xs font-bold ${
@@ -338,5 +342,20 @@ export function FloorBoard() {
         記録担当は最初、お迎え担当になっています。活動の記録そのものはHUGに入力します。
       </p>
     </div>
+  );
+}
+
+/** カリキュラムの生徒の「SSTあり・3枚」などの目印。SSTなしは色を変えて見落とさないようにする */
+function StudyBadge({ label, hasSST }: { label: string; hasSST: boolean }) {
+  return (
+    <span
+      className={`mt-0.5 mr-1 inline-block rounded px-1.5 py-0.5 text-xs font-bold ${
+        hasSST
+          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+          : "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+      }`}
+    >
+      {label}
+    </span>
   );
 }
