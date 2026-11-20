@@ -4,6 +4,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AttendanceStore } from "@/app/hooks/useAttendanceStore";
 import { formatFullDate } from "@/app/lib/date";
+import { PrintNavBar } from "@/app/components/PrintNavBar";
 import {
   TM_TYPE_LABEL,
   type TeachingMaterial,
@@ -240,10 +241,13 @@ export function DayPrintSheet({
   store,
   date,
   onClose,
+  onPrep,
 }: {
   store: AttendanceStore;
   date: Date;
   onClose: () => void;
+  /** 「翌日準備」ボタンの動作（省略時は onClose） */
+  onPrep?: () => void;
 }) {
   if (typeof document === "undefined") return null;
 
@@ -257,22 +261,7 @@ export function DayPrintSheet({
         <h2 className="text-lg font-bold text-white">
           本日のカリキュラム・タブレット（A3横 印刷プレビュー）
         </h2>
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-zinc-100"
-          >
-            🖨 印刷する
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-white/60 px-4 py-2 text-sm font-medium text-white hover:bg-white/10"
-          >
-            閉じる
-          </button>
-        </div>
+        <PrintNavBar onPrep={onPrep ?? onClose} />
       </div>
 
       <p className="mx-auto mb-3 max-w-[400mm] text-xs text-white/80 print:hidden">

@@ -5,6 +5,7 @@ import type { AttendanceStore } from "@/app/hooks/useAttendanceStore";
 import { DayPrintPage } from "@/app/components/DayPrintSheet";
 import { PrepPrintPage, type PrepKind } from "@/app/components/PrepPrintSheet";
 import { toDateKey } from "@/app/lib/date";
+import { PrintNavBar } from "@/app/components/PrintNavBar";
 
 export type PrepSheetKind = PrepKind | "curriculum";
 
@@ -41,22 +42,7 @@ export function PrepBatchSheet({
     <div id="day-print-portal" className="fixed inset-0 z-50 overflow-auto bg-zinc-700/90 p-4">
       <div className="mx-auto mb-4 flex max-w-[400mm] flex-wrap items-center gap-3 print:hidden">
         <h2 className="text-lg font-bold text-white">まとめて印刷（A3横 {items.length}枚）</h2>
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-zinc-100"
-          >
-            🖨 {items.length}枚を印刷する
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-white/60 px-4 py-2 text-sm font-medium text-white hover:bg-white/10"
-          >
-            閉じる
-          </button>
-        </div>
+        <PrintNavBar onPrep={onClose} />
       </div>
       <p className="mx-auto mb-3 max-w-[400mm] text-xs text-white/80 print:hidden">
         印刷の設定で用紙サイズを「A3」、倍率を「100%（既定）」にしてください。「PDFに保存」してから印刷してもかまいません。

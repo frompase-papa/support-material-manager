@@ -4,6 +4,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AttendanceStore } from "@/app/hooks/useAttendanceStore";
 import { WEEKDAY_LABELS, formatFullDate } from "@/app/lib/date";
+import { PrintNavBar } from "@/app/components/PrintNavBar";
 import {
   TM_TYPE_LABEL,
   type TeachingMaterial,
@@ -53,10 +54,13 @@ export function WeekPrintSheet({
   store,
   days,
   onClose,
+  onPrep,
 }: {
   store: AttendanceStore;
   days: Date[];
   onClose: () => void;
+  /** 「翌日準備」ボタンの動作（省略時は onClose） */
+  onPrep?: () => void;
 }) {
   const columns: DayColumn[] = useMemo(() => {
     return days
@@ -150,22 +154,7 @@ export function WeekPrintSheet({
         <span className="rounded bg-white/15 px-2 py-1 text-xs text-white">
           表示倍率 {Math.round(scale * 100)}%
         </span>
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-zinc-100"
-          >
-            🖨 印刷する
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-white/60 px-4 py-2 text-sm font-medium text-white hover:bg-white/10"
-          >
-            閉じる
-          </button>
-        </div>
+        <PrintNavBar onPrep={onPrep ?? onClose} />
       </div>
 
       {scale <= WARN_SCALE && (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { AppNav } from "@/app/components/AppNav";
 import { useAttendanceStore } from "@/app/hooks/useAttendanceStore";
 import { MATERIAL_LABEL, oppositeMaterial, type Material } from "@/app/lib/attendance";
 import { addDays, formatFullDate, startOfDay, toDateKey } from "@/app/lib/date";
@@ -9,9 +9,9 @@ import { normalizeName } from "@/app/lib/nameMatch";
 import { studyLabel } from "@/app/lib/teachingMaterials";
 
 /**
- * 支援進行ボード。学習室で「誰がカリキュラム／タブレットか」「誰が記録を担当するか」を見渡す。
+ * 記録担当振り分け（旧：支援進行ボード）。学習室で「誰がカリキュラム／タブレットか」「誰が記録を担当するか」を見渡す。
  *
- * - 来る生徒とカリキュラム／タブレットは、この支援アプリの出席カレンダーのもの（切り替えも同じ）
+ * - 来る生徒とカリキュラム／タブレットは、この支援アプリのもの（切り替えも同じ）
  * - お迎え担当と在室職員は、送迎アプリから取る（/api/day-plan）
  * - 記録担当は、この画面で決めて共有データに保存する。最初はお迎え担当
  * - 活動の記録そのものはHUGで管理するので、ここでは扱わない
@@ -157,15 +157,10 @@ export function FloorBoard() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
+      <AppNav store={store} active="floor" />
       <header className="mb-4 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Link
-            href="/"
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-          >
-            ← 出席カレンダー
-          </Link>
-          <h1 className="text-xl font-bold tracking-tight">支援進行ボード</h1>
+          <h1 className="text-xl font-bold tracking-tight">記録担当振り分け</h1>
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -283,7 +278,7 @@ export function FloorBoard() {
         <p className="text-sm text-zinc-400">読み込み中…</p>
       ) : view.length === 0 ? (
         <div className="rounded-xl border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900">
-          この日に来る生徒がいません。出席カレンダーにHUGの出席を取り込んでください。
+          この日に来る生徒がいません。右上のメニューの「ハグデータ（出席取り込み）」から、HUGの出席を取り込んでください。
         </div>
       ) : mode === "activity" ? (
         <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
@@ -338,7 +333,7 @@ export function FloorBoard() {
       )}
 
       <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-        「〜へ」を押すと反対側に移ります（出席カレンダーのカリキュラム／タブレットと同じ設定です）。
+        「〜へ」を押すと反対側に移ります（支援アプリのカリキュラム／タブレットと同じ設定です）。
         記録担当は最初、お迎え担当になっています。活動の記録そのものはHUGに入力します。
       </p>
     </div>

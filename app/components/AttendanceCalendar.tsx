@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import Link from "next/link";
 import {
   useAttendanceStore,
   type AttendanceStore,
@@ -29,17 +28,10 @@ import { StudentSettingsPanel } from "@/app/components/StudentSettingsPanel";
 import { HugImportPanel } from "@/app/components/HugImportPanel";
 import { MaterialAssignment } from "@/app/components/MaterialAssignment";
 import { SupportNote } from "@/app/components/SupportNote";
-import { MaterialMasterPanel } from "@/app/components/MaterialMasterPanel";
-import { SupportProgramMasterPanel } from "@/app/components/SupportProgramMasterPanel";
 import { SupportProgramAssignment } from "@/app/components/SupportProgramAssignment";
 import { WeekPrintSheet } from "@/app/components/WeekPrintSheet";
 import { DayPrintSheet } from "@/app/components/DayPrintSheet";
-import { PrepDialog } from "@/app/components/PrepDialog";
-import {
-  AssessmentSheetPanel,
-  isSafeHttpUrl,
-} from "@/app/components/AssessmentSheetPanel";
-import { useAuth } from "@/app/components/AuthProvider";
+import { AppNav } from "@/app/components/AppNav";
 
 type ViewMode = "today" | "week" | "month";
 
@@ -83,119 +75,25 @@ const VIEW_OPTIONS: { value: ViewMode; label: string }[] = [
 
 export default function AttendanceCalendar() {
   const store = useAttendanceStore();
-  const { user, signOut } = useAuth();
   const [today] = useState<Date>(() => startOfDay(new Date()));
   const [view, setView] = useState<ViewMode>("today");
   const [dayDate, setDayDate] = useState<Date>(() => startOfDay(new Date()));
   const [anchor, setAnchor] = useState<Date>(() => startOfDay(new Date()));
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [masterOpen, setMasterOpen] = useState(false);
-  const [assessmentOpen, setAssessmentOpen] = useState(false);
-  const [supportMasterOpen, setSupportMasterOpen] = useState(false);
-  const assessmentReady = isSafeHttpUrl(store.assessmentUrl);
+  const [prepOpen, setPrepOpen] = useState(false);
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
-      <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            出席カレンダー
-          </h1>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            支援教材管理アプリ ／ HUGの出席データと提供教材を管理できます
-          </p>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-            {user?.email && (
-              <span className="max-w-[180px] truncate" title={user.email}>
-                {user.email}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => signOut()}
-              className="rounded-md border border-zinc-300 px-2 py-1 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-            >
-              ログアウト
-            </button>
-          </div>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Link
-              href="/study"
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-            >
-              📊 学習状況
-            </Link>
-            <Link
-              href="/floor"
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-            >
-              🧭 支援進行ボード
-            </Link>
-            <button
-              type="button"
-              onClick={() => setImportOpen(true)}
-              className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-            >
-              ↑ HUGデータ取込
-            </button>
-            <button
-              type="button"
-              onClick={() => setMasterOpen(true)}
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-            >
-              📚 教材マスタ
-            </button>
-            <button
-              type="button"
-              onClick={() => setSupportMasterOpen(true)}
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-            >
-              🧩 専門支援マスタ
-            </button>
-            {/* カリキュラムアセスメントシート（URLは教室ごとに登録） */}
-            {assessmentReady ? (
-              <span className="inline-flex overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700">
-                <a
-                  href={store.assessmentUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="カリキュラムアセスメントシートを別タブで開く"
-                  className="px-3 py-2 text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                >
-                  📋 アセスメントシート ↗
-                </a>
-                <button
-                  type="button"
-                  onClick={() => setAssessmentOpen(true)}
-                  aria-label="アセスメントシートのURLを変更"
-                  title="URLを変更"
-                  className="border-l border-zinc-300 px-2 py-2 text-sm text-zinc-500 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-                >
-                  ⚙
-                </button>
-              </span>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setAssessmentOpen(true)}
-                className="rounded-lg border border-dashed border-zinc-400 px-3 py-2 text-sm font-medium text-zinc-500 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
-              >
-                📋 アセスメントシート（URL未登録）
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(true)}
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-            >
-              ⚙ 生徒設定
-            </button>
-          </div>
-        </div>
-      </header>
+      <AppNav
+        store={store}
+        active="home"
+        prepOpen={prepOpen}
+        onPrepOpenChange={setPrepOpen}
+        importDefaultYear={anchor.getFullYear()}
+        importDefaultMonth={anchor.getMonth() + 1}
+      />
+      <h1 className="sr-only">支援アプリ</h1>
 
       {store.hydrated && store.localBackupAvailable && (
         <MigrationBanner store={store} />
@@ -216,7 +114,13 @@ export default function AttendanceCalendar() {
 
           <div className="mt-6">
             {view === "today" && (
-              <DayView store={store} date={dayDate} today={today} onMove={setDayDate} />
+              <DayView
+                store={store}
+                date={dayDate}
+                today={today}
+                onMove={setDayDate}
+                onOpenPrep={() => setPrepOpen(true)}
+              />
             )}
             {view === "week" && (
               <WeekView store={store} anchor={anchor} today={today} onMove={setAnchor} />
@@ -245,22 +149,6 @@ export default function AttendanceCalendar() {
           defaultYear={anchor.getFullYear()}
           defaultMonth={anchor.getMonth() + 1}
           onClose={() => setImportOpen(false)}
-        />
-      )}
-      {masterOpen && (
-        <MaterialMasterPanel store={store} onClose={() => setMasterOpen(false)} />
-      )}
-      {supportMasterOpen && (
-        <SupportProgramMasterPanel
-          store={store}
-          onClose={() => setSupportMasterOpen(false)}
-        />
-      )}
-      {assessmentOpen && (
-        <AssessmentSheetPanel
-          url={store.assessmentUrl}
-          onSave={store.setAssessmentUrl}
-          onClose={() => setAssessmentOpen(false)}
         />
       )}
     </div>
@@ -589,11 +477,13 @@ function DayView({
   date,
   today,
   onMove,
+  onOpenPrep,
 }: {
   store: Store;
   date: Date;
   today: Date;
   onMove: (d: Date) => void;
+  onOpenPrep: () => void;
 }) {
   const items = store.getForDate(date);
   const grouped = groupByMaterial(items);
@@ -602,7 +492,6 @@ function DayView({
   const unattended = store.getUnattendedStudents(date);
   const isToday = isSameDay(date, today);
   const [printOpen, setPrintOpen] = useState(false);
-  const [prepOpen, setPrepOpen] = useState(false);
 
   return (
     <section>
@@ -644,14 +533,6 @@ function DayView({
             className="rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-800"
             aria-label="日付を選択"
           />
-          <button
-            type="button"
-            onClick={() => setPrepOpen(true)}
-            title="おやつ・カリキュラム／タブレット・17じ18じの3枚を、翌日ぶん準備します"
-            className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-          >
-            📋 翌日準備
-          </button>
           <button
             type="button"
             onClick={() => setPrintOpen(true)}
@@ -705,11 +586,11 @@ function DayView({
           store={store}
           date={date}
           onClose={() => setPrintOpen(false)}
+          onPrep={() => {
+            setPrintOpen(false);
+            onOpenPrep();
+          }}
         />
-      )}
-
-      {prepOpen && (
-        <PrepDialog store={store} today={today} onClose={() => setPrepOpen(false)} />
       )}
 
       {unattended.length > 0 && (

@@ -47,6 +47,8 @@ export function PrepDialog({
     leave: true,
   });
   const [batchOpen, setBatchOpen] = useState(false);
+  // 選んだ1日ぶんの3枚をまとめて印刷
+  const [dayBatchOpen, setDayBatchOpen] = useState(false);
   const dayChecked = (d: Date) => dayChecks[toDateKey(d)] ?? store.getForDate(d).length > 0;
 
   if (typeof document === "undefined") return null;
@@ -54,6 +56,16 @@ export function PrepDialog({
   // 印刷シートを開いている間は、シートだけを出す（印刷時に他の要素が混ざらないように）
   if (open === "curriculum") {
     return <DayPrintSheet store={store} date={date} onClose={() => setOpen(null)} />;
+  }
+  if (dayBatchOpen) {
+    return (
+      <PrepBatchSheet
+        store={store}
+        dates={[date]}
+        kinds={PREP_KIND_ORDER}
+        onClose={() => setDayBatchOpen(false)}
+      />
+    );
   }
   if (batchOpen) {
     return (
@@ -139,6 +151,14 @@ export function PrepDialog({
             </li>
           ))}
         </ul>
+        <button
+          type="button"
+          disabled={count === 0}
+          onClick={() => setDayBatchOpen(true)}
+          className="mt-3 w-full rounded-xl bg-zinc-900 px-4 py-3 text-base font-bold text-white disabled:opacity-40 dark:bg-white dark:text-zinc-900"
+        >
+          🖨 ①②③をまとめて印刷（この日の3枚）
+        </button>
           </>
         ) : (
           <div>

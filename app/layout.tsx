@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "支援教材管理アプリ",
+  title: "支援アプリ",
   description: "生徒の通所予定と教材選定状況を管理するアプリ",
 };
 
